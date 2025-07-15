@@ -8,6 +8,7 @@ import { useSettingsStore } from "@/hooks/stores";
 
 import notifications from "../notifications";
 import { SelectMenuBasic } from "../components/SelectMenuBasic";
+import Fieldset from "../components/Fieldset";
 
 import { SettingsItem } from "./devices.$id.settings";
 const defaultEdid =
@@ -45,6 +46,7 @@ export default function SettingsVideoRoute() {
   const [streamQuality, setStreamQuality] = useState("1");
   const [customEdidValue, setCustomEdidValue] = useState<string | null>(null);
   const [edid, setEdid] = useState<string | null>(null);
+  const [edidLoading, setEdidLoading] = useState(false);
 
   // Video enhancement settings from store
   const videoSaturation = useSettingsStore(state => state.videoSaturation);
@@ -55,12 +57,14 @@ export default function SettingsVideoRoute() {
   const setVideoContrast = useSettingsStore(state => state.setVideoContrast);
 
   useEffect(() => {
+    setEdidLoading(true);
     send("getStreamQualityFactor", {}, resp => {
       if ("error" in resp) return;
       setStreamQuality(String(resp.result));
     });
 
     send("getEDID", {}, resp => {
+      setEdidLoading(false);
       if ("error" in resp) {
         notifications.error(`Failed to get EDID: ${resp.error.data || "Unknown error"}`);
         return;
@@ -99,7 +103,9 @@ export default function SettingsVideoRoute() {
   };
 
   const handleEDIDChange = (newEdid: string) => {
+    setEdidLoading(true);
     send("setEDID", { edid: newEdid }, resp => {
+      setEdidLoading(false);
       if ("error" in resp) {
         notifications.error(`Failed to set EDID: ${resp.error.data || "Unknown error"}`);
         return;
@@ -141,7 +147,7 @@ export default function SettingsVideoRoute() {
               title="Video Enhancement"
               description="Adjust color settings to make the video output more vibrant and colorful"
             />
-            
+
             <div className="space-y-4 pl-4">
               <SettingsItem
                 title="Saturation"
@@ -202,59 +208,62 @@ export default function SettingsVideoRoute() {
               </div>
             </div>
 
-            <SettingsItem
-              title="EDID"
-              description="Adjust the EDID settings for the display"
-            >
-              <SelectMenuBasic
-                size="SM"
-                label=""
-                fullWidth
-                value={customEdidValue ? "custom" : edid || "asd"}
-                onChange={e => {
-                  if (e.target.value === "custom") {
-                    setEdid("custom");
-                    setCustomEdidValue("");
-                  } else {
-                    setCustomEdidValue(null);
-                    handleEDIDChange(e.target.value as string);
-                  }
-                }}
-                options={[...edids, { value: "custom", label: "Custom" }]}
-              />
-            </SettingsItem>
-            {customEdidValue !== null && (
-              <>
-                <SettingsItem
-                  title="Custom EDID"
-                  description="EDID details video mode compatibility. Default settings works in most cases, but unique UEFI/BIOS might need adjustments."
-                />
-                <TextAreaWithLabel
-                  label="EDID File"
-                  placeholder="00F..."
-                  rows={3}
-                  value={customEdidValue}
-                  onChange={e => setCustomEdidValue(e.target.value)}
-                />
-                <div className="flex justify-start gap-x-2">
-                  <Button
-                    size="SM"
-                    theme="primary"
-                    text="Set Custom EDID"
-                    onClick={() => handleEDIDChange(customEdidValue)}
-                  />
-                  <Button
-                    size="SM"
-                    theme="light"
-                    text="Restore to default"
-                    onClick={() => {
+            <Fieldset disabled={edidLoading}>
+              <SettingsItem
+                title="EDID"
+                description="Adjust the EDID settings for the display"
+                loading={edidLoading}
+              >
+                <SelectMenuBasic
+                  size="SM"
+                  label=""
+                  fullWidth
+                  value={customEdidValue ? "custom" : edid || "asd"}
+                  onChange={e => {
+                    if (e.target.value === "custom") {
+                      setEdid("custom");
+                      setCustomEdidValue("");
+                    } else {
                       setCustomEdidValue(null);
-                      handleEDIDChange(defaultEdid);
-                    }}
+                      handleEDIDChange(e.target.value as string);
+                    }
+                  }}
+                  options={[...edids, { value: "custom", label: "Custom" }]}
+                />
+              </SettingsItem>
+              {customEdidValue !== null && (
+                <>
+                  <SettingsItem
+                    title="Custom EDID"
+                    description="EDID details video mode compatibility. Default settings works in most cases, but unique UEFI/BIOS might need adjustments."
                   />
-                </div>
-              </>
-            )}
+                  <TextAreaWithLabel
+                    label="EDID File"
+                    placeholder="00F..."
+                    rows={3}
+                    value={customEdidValue}
+                    onChange={e => setCustomEdidValue(e.target.value)}
+                  />
+                  <div className="flex justify-start gap-x-2">
+                    <Button
+                      size="SM"
+                      theme="primary"
+                      text="Set Custom EDID"
+                      onClick={() => handleEDIDChange(customEdidValue)}
+                    />
+                    <Button
+                      size="SM"
+                      theme="light"
+                      text="Restore to default"
+                      onClick={() => {
+                        setCustomEdidValue(null);
+                        handleEDIDChange(defaultEdid);
+                      }}
+                    />
+                  </div>
+                </>
+              )}
+            </Fieldset>
           </div>
         </div>
       </div>
