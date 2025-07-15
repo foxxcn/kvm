@@ -97,7 +97,9 @@ export default function SettingsVideoRoute() {
         return;
       }
 
-      notifications.success(`Stream quality set to ${streamQualityOptions.find(x => x.value === factor)?.label}`);
+      notifications.success(
+        `Stream quality set to ${streamQualityOptions.find(x => x.value === factor)?.label}`,
+      );
       setStreamQuality(factor);
     });
   };
@@ -112,7 +114,7 @@ export default function SettingsVideoRoute() {
       }
 
       notifications.success(
-        `EDID set successfully to ${edids.find(x => x.value === newEdid)?.label}`,
+        `EDID set successfully to ${edids.find(x => x.value === newEdid)?.label || "custom"}`,
       );
       // Update the EDID value in the UI
       setEdid(newEdid);
@@ -160,7 +162,7 @@ export default function SettingsVideoRoute() {
                   step="0.1"
                   value={videoSaturation}
                   onChange={e => setVideoSaturation(parseFloat(e.target.value))}
-                  className="w-32 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+                  className="h-2 w-32 cursor-pointer appearance-none rounded-lg bg-gray-200 dark:bg-gray-700"
                 />
               </SettingsItem>
 
@@ -175,7 +177,7 @@ export default function SettingsVideoRoute() {
                   step="0.1"
                   value={videoBrightness}
                   onChange={e => setVideoBrightness(parseFloat(e.target.value))}
-                  className="w-32 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+                  className="h-2 w-32 cursor-pointer appearance-none rounded-lg bg-gray-200 dark:bg-gray-700"
                 />
               </SettingsItem>
 
@@ -190,7 +192,7 @@ export default function SettingsVideoRoute() {
                   step="0.1"
                   value={videoContrast}
                   onChange={e => setVideoContrast(parseFloat(e.target.value))}
-                  className="w-32 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+                  className="h-2 w-32 cursor-pointer appearance-none rounded-lg bg-gray-200 dark:bg-gray-700"
                 />
               </SettingsItem>
 
@@ -208,7 +210,7 @@ export default function SettingsVideoRoute() {
               </div>
             </div>
 
-            <Fieldset disabled={edidLoading}>
+            <Fieldset disabled={edidLoading} className="space-y-4">
               <SettingsItem
                 title="EDID"
                 description="Adjust the EDID settings for the display"
@@ -249,12 +251,14 @@ export default function SettingsVideoRoute() {
                       size="SM"
                       theme="primary"
                       text="Set Custom EDID"
+                      loading={edidLoading}
                       onClick={() => handleEDIDChange(customEdidValue)}
                     />
                     <Button
                       size="SM"
                       theme="light"
                       text="Restore to default"
+                      loading={edidLoading}
                       onClick={() => {
                         setCustomEdidValue(null);
                         handleEDIDChange(defaultEdid);
