@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gwatts/rootcerts"
+	_ "github.com/jetkvm/kvm/docs"
 )
 
 var appCtx context.Context

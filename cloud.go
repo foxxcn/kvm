@@ -195,6 +195,18 @@ func wsResetMetrics(established bool, sourceType string, source string) {
 	}
 }
 
+// handleCloudRegister godoc
+// @Summary Register device to cloud
+// @Description Register the device to the cloud using a temporary token and OIDC
+// @Tags cloud
+// @Accept json
+// @Produce json
+// @Param CloudRegisterRequest body CloudRegisterRequest true "Cloud register request"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /cloud/register [post]
+// @Security AuthToken
 func handleCloudRegister(c *gin.Context) {
 	var req CloudRegisterRequest
 

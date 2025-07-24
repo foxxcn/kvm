@@ -1,3 +1,10 @@
+// @title JetKVM API
+// @version 1.0
+// @description JetKVM backend API documentation
+// @securityDefinitions.apikey AuthToken
+// @in cookie
+// @name authToken
+
 package kvm
 
 import (
@@ -24,6 +31,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
+	"github.com/swaggo/files"
+	"github.com/swaggo/gin-swagger"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -165,12 +174,26 @@ func setupRouter() *gin.Engine {
 		c.Status(http.StatusNotFound)
 	})
 
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	return r
 }
 
 // TODO: support multiple sessions?
 var currentSession *Session
 
+// handleWebRTCSession godoc
+// @Summary Legacy WebRTC session
+// @Description Establish a legacy WebRTC session (for backward compatibility)
+// @Tags webrtc
+// @Accept json
+// @Produce json
+// @Param WebRTCSessionRequest body WebRTCSessionRequest true "WebRTC session request"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /webrtc/session [post]
+// @Security AuthToken
 func handleWebRTCSession(c *gin.Context) {
 	var req WebRTCSessionRequest
 
@@ -207,6 +230,15 @@ var (
 	pongMessage = []byte("pong")
 )
 
+// handleLocalWebRTCSignal godoc
+// @Summary Local WebRTC signaling
+// @Description WebSocket endpoint for local WebRTC signaling
+// @Tags webrtc
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]string
+// @Router /webrtc/signaling/client [get]
+// @Security AuthToken
 func handleLocalWebRTCSignal(c *gin.Context) {
 	// get the source from the request
 	source := c.ClientIP()
@@ -428,6 +460,17 @@ func handleWebRTCSignalWsMessages(
 	}
 }
 
+// handleLogin godoc
+// @Summary Local login
+// @Description Login with local password
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param LoginRequest body LoginRequest true "Login request"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Router /auth/login-local [post]
 func handleLogin(c *gin.Context) {
 	if config.LocalAuthMode == "noPassword" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Login is disabled in noPassword mode"})
@@ -455,6 +498,15 @@ func handleLogin(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Login successful"})
 }
 
+// handleLogout godoc
+// @Summary Local logout
+// @Description Logout and clear session
+// @Tags auth
+// @Produce json
+// @Success 200 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /auth/logout [post]
+// @Security AuthToken
 func handleLogout(c *gin.Context) {
 	config.LocalAuthToken = ""
 	if err := SaveConfig(); err != nil {
@@ -544,6 +596,14 @@ func RunWebServer() {
 	}
 }
 
+// handleDevice godoc
+// @Summary Get device info
+// @Description Returns local device info
+// @Tags device
+// @Produce json
+// @Success 200 {object} LocalDevice
+// @Router /device [get]
+// @Security AuthToken
 func handleDevice(c *gin.Context) {
 	response := LocalDevice{
 		AuthMode:     &config.LocalAuthMode,
@@ -554,6 +614,18 @@ func handleDevice(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// handleCreatePassword godoc
+// @Summary Set local password
+// @Description Set a new local password (only in noPassword mode)
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param SetPasswordRequest body SetPasswordRequest true "Set password request"
+// @Success 201 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /auth/password-local [post]
+// @Security AuthToken
 func handleCreatePassword(c *gin.Context) {
 	if config.HashedPassword != "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Password already set"})
@@ -594,6 +666,19 @@ func handleCreatePassword(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"message": "Password set successfully"})
 }
 
+// handleUpdatePassword godoc
+// @Summary Change local password
+// @Description Change the local password (only in password mode)
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param ChangePasswordRequest body ChangePasswordRequest true "Change password request"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /auth/password-local [put]
+// @Security AuthToken
 func handleUpdatePassword(c *gin.Context) {
 	if config.HashedPassword == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Password is not set"})
@@ -637,6 +722,19 @@ func handleUpdatePassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Password updated successfully"})
 }
 
+// handleDeletePassword godoc
+// @Summary Disable local password
+// @Description Disable the local password (only in password mode)
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param LoginRequest body LoginRequest true "Password for verification"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /auth/local-password [delete]
+// @Security AuthToken
 func handleDeletePassword(c *gin.Context) {
 	if config.HashedPassword == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Password is not set"})
@@ -673,6 +771,13 @@ func handleDeletePassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Password disabled successfully"})
 }
 
+// handleDeviceStatus godoc
+// @Summary Get device setup status
+// @Description Returns whether the device is setup
+// @Tags device
+// @Produce json
+// @Success 200 {object} DeviceStatus
+// @Router /device/status [get]
 func handleDeviceStatus(c *gin.Context) {
 	response := DeviceStatus{
 		IsSetup: config.LocalAuthMode != "",
@@ -681,6 +786,14 @@ func handleDeviceStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// handleCloudState godoc
+// @Summary Get cloud state
+// @Description Returns cloud connection state
+// @Tags cloud
+// @Produce json
+// @Success 200 {object} CloudState
+// @Router /cloud/state [get]
+// @Security AuthToken
 func handleCloudState(c *gin.Context) {
 	response := CloudState{
 		Connected: config.CloudToken != "",
@@ -691,6 +804,17 @@ func handleCloudState(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// handleSetup godoc
+// @Summary Setup device
+// @Description Setup device with password or noPassword mode
+// @Tags device
+// @Accept json
+// @Produce json
+// @Param SetupRequest body SetupRequest true "Setup request"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /device/setup [post]
 func handleSetup(c *gin.Context) {
 	// Check if the device is already set up
 	if config.LocalAuthMode != "" || config.HashedPassword != "" {

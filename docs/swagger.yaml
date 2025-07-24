@@ -1,0 +1,482 @@
+definitions:
+  kvm.ChangePasswordRequest:
+    properties:
+      newPassword:
+        type: string
+      oldPassword:
+        type: string
+    type: object
+  kvm.CloudRegisterRequest:
+    properties:
+      clientId:
+        type: string
+      cloudApi:
+        type: string
+      oidcGoogle:
+        type: string
+      token:
+        type: string
+    type: object
+  kvm.CloudState:
+    properties:
+      appUrl:
+        type: string
+      connected:
+        type: boolean
+      url:
+        type: string
+    type: object
+  kvm.DeviceStatus:
+    properties:
+      isSetup:
+        type: boolean
+    type: object
+  kvm.LocalDevice:
+    properties:
+      authMode:
+        type: string
+      deviceId:
+        type: string
+      loopbackOnly:
+        type: boolean
+    type: object
+  kvm.LoginRequest:
+    properties:
+      password:
+        type: string
+    type: object
+  kvm.SetPasswordRequest:
+    properties:
+      password:
+        type: string
+    type: object
+  kvm.SetupRequest:
+    properties:
+      localAuthMode:
+        type: string
+      password:
+        type: string
+    type: object
+  kvm.WebRTCSessionRequest:
+    properties:
+      OidcGoogle:
+        type: string
+      iceServers:
+        items:
+          type: string
+        type: array
+      ip:
+        type: string
+      sd:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: JetKVM backend API documentation
+  title: JetKVM API
+  version: "1.0"
+paths:
+  /auth/local-password:
+    delete:
+      consumes:
+      - application/json
+      description: Disable the local password (only in password mode)
+      parameters:
+      - description: Password for verification
+        in: body
+        name: LoginRequest
+        required: true
+        schema:
+          $ref: '#/definitions/kvm.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - AuthToken: []
+      summary: Disable local password
+      tags:
+      - auth
+  /auth/login-local:
+    post:
+      consumes:
+      - application/json
+      description: Login with local password
+      parameters:
+      - description: Login request
+        in: body
+        name: LoginRequest
+        required: true
+        schema:
+          $ref: '#/definitions/kvm.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Local login
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      description: Logout and clear session
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - AuthToken: []
+      summary: Local logout
+      tags:
+      - auth
+  /auth/password-local:
+    post:
+      consumes:
+      - application/json
+      description: Set a new local password (only in noPassword mode)
+      parameters:
+      - description: Set password request
+        in: body
+        name: SetPasswordRequest
+        required: true
+        schema:
+          $ref: '#/definitions/kvm.SetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - AuthToken: []
+      summary: Set local password
+      tags:
+      - auth
+    put:
+      consumes:
+      - application/json
+      description: Change the local password (only in password mode)
+      parameters:
+      - description: Change password request
+        in: body
+        name: ChangePasswordRequest
+        required: true
+        schema:
+          $ref: '#/definitions/kvm.ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - AuthToken: []
+      summary: Change local password
+      tags:
+      - auth
+  /cloud/register:
+    post:
+      consumes:
+      - application/json
+      description: Register the device to the cloud using a temporary token and OIDC
+      parameters:
+      - description: Cloud register request
+        in: body
+        name: CloudRegisterRequest
+        required: true
+        schema:
+          $ref: '#/definitions/kvm.CloudRegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - AuthToken: []
+      summary: Register device to cloud
+      tags:
+      - cloud
+  /cloud/state:
+    get:
+      description: Returns cloud connection state
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/kvm.CloudState'
+      security:
+      - AuthToken: []
+      summary: Get cloud state
+      tags:
+      - cloud
+  /device:
+    get:
+      description: Returns local device info
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/kvm.LocalDevice'
+      security:
+      - AuthToken: []
+      summary: Get device info
+      tags:
+      - device
+  /device/setup:
+    post:
+      consumes:
+      - application/json
+      description: Setup device with password or noPassword mode
+      parameters:
+      - description: Setup request
+        in: body
+        name: SetupRequest
+        required: true
+        schema:
+          $ref: '#/definitions/kvm.SetupRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Setup device
+      tags:
+      - device
+  /device/status:
+    get:
+      description: Returns whether the device is setup
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/kvm.DeviceStatus'
+      summary: Get device setup status
+      tags:
+      - device
+  /storage/upload:
+    post:
+      consumes:
+      - application/octet-stream
+      description: Upload a file to the device storage using HTTP POST
+      parameters:
+      - description: Upload session ID
+        in: query
+        name: uploadId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - AuthToken: []
+      summary: Upload file to device storage
+      tags:
+      - storage
+  /webrtc/session:
+    post:
+      consumes:
+      - application/json
+      description: Establish a legacy WebRTC session (for backward compatibility)
+      parameters:
+      - description: WebRTC session request
+        in: body
+        name: WebRTCSessionRequest
+        required: true
+        schema:
+          $ref: '#/definitions/kvm.WebRTCSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - AuthToken: []
+      summary: Legacy WebRTC session
+      tags:
+      - webrtc
+  /webrtc/signaling/client:
+    get:
+      description: WebSocket endpoint for local WebRTC signaling
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - AuthToken: []
+      summary: Local WebRTC signaling
+      tags:
+      - webrtc
+securityDefinitions:
+  AuthToken:
+    in: cookie
+    name: authToken
+    type: apiKey
+swagger: "2.0"

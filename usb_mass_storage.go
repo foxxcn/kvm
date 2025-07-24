@@ -600,6 +600,18 @@ func handleUploadChannel(d *webrtc.DataChannel) {
 	<-uploadComplete
 }
 
+// handleUploadHttp godoc
+// @Summary Upload file to device storage
+// @Description Upload a file to the device storage using HTTP POST
+// @Tags storage
+// @Accept octet-stream
+// @Produce json
+// @Param uploadId query string true "Upload session ID"
+// @Success 200 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /storage/upload [post]
+// @Security AuthToken
 func handleUploadHttp(c *gin.Context) {
 	uploadId := c.Query("uploadId")
 	pendingUploadsMutex.Lock()
