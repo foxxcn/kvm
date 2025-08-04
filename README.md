@@ -9,6 +9,8 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/jetkvm/kvm)](https://goreportcard.com/report/github.com/jetkvm/kvm)
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/foxxcn/kvm)
+
 </div>
 
 JetKVM is a high-performance, open-source KVM over IP (Keyboard, Video, Mouse) solution designed for efficient remote management of computers, servers, and workstations. Whether you're dealing with boot failures, installing a new operating system, adjusting BIOS settings, or simply taking control of a machine from afar, JetKVM provides the tools to get it done effectively.
