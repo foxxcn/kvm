@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { LuExternalLink } from "react-icons/lu";
 
 import { Button, LinkButton } from "@components/Button";
-import { useJsonRpc } from "@/hooks/useJsonRpc";
+import { JsonRpcResponse, useJsonRpc } from "@/hooks/useJsonRpc";
 
 import { InputFieldWithLabel } from "./InputField";
 import { SelectMenuBasic } from "./SelectMenuBasic";
@@ -30,11 +30,11 @@ export function JigglerSetting({
     },
   );
 
-  const [send] = useJsonRpc();
+  const { send } = useJsonRpc();
   const [timezones, setTimezones] = useState<string[]>([]);
 
   useEffect(() => {
-    send("getTimezones", {}, resp => {
+    send("getTimezones", {}, (resp: JsonRpcResponse) => {
       if ("error" in resp) return;
       setTimezones(resp.result as string[]);
     });
