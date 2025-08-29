@@ -87,7 +87,7 @@ export default function SettingsAccessIndexRoute() {
     });
   }, [send]);
 
-  const deregisterDevice = async () => {
+  const deregisterDevice = () => {
     send("deregisterDevice", {}, (resp: JsonRpcResponse) => {
       if ("error" in resp) {
         notifications.error(
@@ -166,9 +166,7 @@ export default function SettingsAccessIndexRoute() {
 
         notifications.success("TLS settings updated successfully");
       });
-    },
-    [send],
-  );
+    }, [send]);
 
   // Handle TLS mode change
   const handleTlsModeChange = (value: string) => {
@@ -198,7 +196,7 @@ export default function SettingsAccessIndexRoute() {
     getCloudState();
     getTLSState();
 
-    send("getDeviceID", {}, async (resp: JsonRpcResponse) => {
+    send("getDeviceID", {}, (resp: JsonRpcResponse) => {
       if ("error" in resp) return console.error(resp.error);
       setDeviceId(resp.result as string);
     });
