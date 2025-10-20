@@ -1,20 +1,20 @@
 package kvm
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/prometheus/common/version"
 )
 
-var backlightState = 0 // 0 - NORMAL, 1 - DIMMED, 2 - OFF
-
 var (
-	currentScreen   = "ui_Boot_Screen"
-	displayedTexts  = make(map[string]string)
-	screenStateLock = sync.Mutex{}
+	backlightState = 0 // 0 - NORMAL, 1 - DIMMED, 2 - OFF
 )
 
 var (
@@ -23,177 +23,150 @@ var (
 )
 
 const (
-	touchscreenDevice     string = "/dev/input/event1"
 	backlightControlClass string = "/sys/class/backlight/backlight/brightness"
 )
 
-// do not call this function directly, use switchToScreenIfDifferent instead
-// this function is not thread safe
-func switchToScreen(screen string) {
-	_, err := CallCtrlAction("lv_scr_load", map[string]any{"obj": screen})
-	if err != nil {
-		displayLogger.Warn().Err(err).Str("screen", screen).Msg("failed to switch to screen")
+func switchToMainScreen() {
+	if networkManager == nil {
+		nativeInstance.SwitchToScreenIfDifferent("no_network_screen")
 		return
 	}
-	currentScreen = screen
-}
 
-func lvObjSetState(objName string, state string) (*CtrlResponse, error) {
-	return CallCtrlAction("lv_obj_set_state", map[string]any{"obj": objName, "state": state})
-}
-
-func lvObjAddFlag(objName string, flag string) (*CtrlResponse, error) {
-	return CallCtrlAction("lv_obj_add_flag", map[string]any{"obj": objName, "flag": flag})
-}
-
-func lvObjClearFlag(objName string, flag string) (*CtrlResponse, error) {
-	return CallCtrlAction("lv_obj_clear_flag", map[string]any{"obj": objName, "flag": flag})
-}
-
-func lvObjHide(objName string) (*CtrlResponse, error) {
-	return lvObjAddFlag(objName, "LV_OBJ_FLAG_HIDDEN")
-}
-
-func lvObjShow(objName string) (*CtrlResponse, error) {
-	return lvObjClearFlag(objName, "LV_OBJ_FLAG_HIDDEN")
-}
-
-func lvObjSetOpacity(objName string, opacity int) (*CtrlResponse, error) { // nolint:unused
-	return CallCtrlAction("lv_obj_set_style_opa_layered", map[string]any{"obj": objName, "opa": opacity})
-}
-
-func lvObjFadeIn(objName string, duration uint32) (*CtrlResponse, error) {
-	return CallCtrlAction("lv_obj_fade_in", map[string]any{"obj": objName, "time": duration})
-}
-
-func lvObjFadeOut(objName string, duration uint32) (*CtrlResponse, error) {
-	return CallCtrlAction("lv_obj_fade_out", map[string]any{"obj": objName, "time": duration})
-}
-
-func lvLabelSetText(objName string, text string) (*CtrlResponse, error) {
-	return CallCtrlAction("lv_label_set_text", map[string]any{"obj": objName, "text": text})
-}
-
-func lvImgSetSrc(objName string, src string) (*CtrlResponse, error) {
-	return CallCtrlAction("lv_img_set_src", map[string]any{"obj": objName, "src": src})
-}
-
-func lvDispSetRotation(rotation string) (*CtrlResponse, error) {
-	return CallCtrlAction("lv_disp_set_rotation", map[string]any{"rotation": rotation})
-}
-
-func updateLabelIfChanged(objName string, newText string) {
-	screenStateLock.Lock()
-	defer screenStateLock.Unlock()
-
-	if newText != "" && newText != displayedTexts[objName] {
-		_, _ = lvLabelSetText(objName, newText)
-		displayedTexts[objName] = newText
+	if networkManager.IsUp() {
+		nativeInstance.SwitchToScreenIfDifferent("home_screen")
+	} else {
+		nativeInstance.SwitchToScreenIfDifferent("no_network_screen")
 	}
 }
-
-func switchToScreenIfDifferent(screenName string) {
-	screenStateLock.Lock()
-	defer screenStateLock.Unlock()
-
-	if currentScreen != screenName {
-		displayLogger.Info().Str("from", currentScreen).Str("to", screenName).Msg("switching screen")
-		switchToScreen(screenName)
-	}
-}
-
-func clearDisplayState() {
-	screenStateLock.Lock()
-	defer screenStateLock.Unlock()
-
-	displayedTexts = make(map[string]string)
-	currentScreen = "ui_Boot_Screen"
-}
-
-var (
-	cloudBlinkLock    sync.Mutex = sync.Mutex{}
-	cloudBlinkStopped bool
-	cloudBlinkTicker  *time.Ticker
-)
 
 func updateDisplay() {
-	updateLabelIfChanged("ui_Home_Content_Ip", networkState.IPv4String())
+	if networkManager != nil {
+		nativeInstance.UpdateLabelIfChanged("home_info_ipv4_addr", networkManager.IPv4String())
+		nativeInstance.UpdateLabelAndChangeVisibility("home_info_ipv6_addr", networkManager.IPv6String())
+		nativeInstance.UpdateLabelIfChanged("home_info_mac_addr", networkManager.MACString())
+	}
+
+	_, _ = nativeInstance.UIObjHide("menu_btn_network")
+	_, _ = nativeInstance.UIObjHide("menu_btn_access")
+
+	switch config.NetworkConfig.DHCPClient.String {
+	case "jetdhcpc":
+		nativeInstance.UpdateLabelIfChanged("dhcp_client_change_label", "Change to udhcpc")
+	case "udhcpc":
+		nativeInstance.UpdateLabelIfChanged("dhcp_client_change_label", "Change to JetKVM")
+	}
+
 	if usbState == "configured" {
-		updateLabelIfChanged("ui_Home_Footer_Usb_Status_Label", "Connected")
-		_, _ = lvObjSetState("ui_Home_Footer_Usb_Status_Label", "LV_STATE_DEFAULT")
+		nativeInstance.UpdateLabelIfChanged("usb_status_label", "Connected")
+		_, _ = nativeInstance.UIObjAddState("usb_status_label", "LV_STATE_CHECKED")
 	} else {
-		updateLabelIfChanged("ui_Home_Footer_Usb_Status_Label", "Disconnected")
-		_, _ = lvObjSetState("ui_Home_Footer_Usb_Status_Label", "LV_STATE_USER_2")
+		nativeInstance.UpdateLabelIfChanged("usb_status_label", "Disconnected")
+		_, _ = nativeInstance.UIObjClearState("usb_status_label", "LV_STATE_CHECKED")
 	}
 	if lastVideoState.Ready {
-		updateLabelIfChanged("ui_Home_Footer_Hdmi_Status_Label", "Connected")
-		_, _ = lvObjSetState("ui_Home_Footer_Hdmi_Status_Label", "LV_STATE_DEFAULT")
+		nativeInstance.UpdateLabelIfChanged("hdmi_status_label", "Connected")
+		_, _ = nativeInstance.UIObjAddState("hdmi_status_label", "LV_STATE_CHECKED")
 	} else {
-		updateLabelIfChanged("ui_Home_Footer_Hdmi_Status_Label", "Disconnected")
-		_, _ = lvObjSetState("ui_Home_Footer_Hdmi_Status_Label", "LV_STATE_USER_2")
+		nativeInstance.UpdateLabelIfChanged("hdmi_status_label", "Disconnected")
+		_, _ = nativeInstance.UIObjClearState("hdmi_status_label", "LV_STATE_CHECKED")
 	}
-	updateLabelIfChanged("ui_Home_Header_Cloud_Status_Label", fmt.Sprintf("%d active", actionSessions))
+	nativeInstance.UpdateLabelIfChanged("cloud_status_label", fmt.Sprintf("%d active", actionSessions))
 
-	if networkState.IsUp() {
-		switchToScreenIfDifferent("ui_Home_Screen")
+	if networkManager != nil && networkManager.IsUp() {
+		nativeInstance.UISetVar("main_screen", "home_screen")
+		nativeInstance.SwitchToScreenIf("home_screen", []string{"no_network_screen", "boot_screen"})
 	} else {
-		switchToScreenIfDifferent("ui_No_Network_Screen")
+		nativeInstance.UISetVar("main_screen", "no_network_screen")
+		nativeInstance.SwitchToScreenIf("no_network_screen", []string{"home_screen", "boot_screen"})
 	}
 
 	if cloudConnectionState == CloudConnectionStateNotConfigured {
-		_, _ = lvObjHide("ui_Home_Header_Cloud_Status_Icon")
+		_, _ = nativeInstance.UIObjHide("cloud_status_icon")
 	} else {
-		_, _ = lvObjShow("ui_Home_Header_Cloud_Status_Icon")
+		_, _ = nativeInstance.UIObjShow("cloud_status_icon")
 	}
 
 	switch cloudConnectionState {
 	case CloudConnectionStateDisconnected:
-		_, _ = lvImgSetSrc("ui_Home_Header_Cloud_Status_Icon", "cloud_disconnected.png")
+		_, _ = nativeInstance.UIObjSetImageSrc("cloud_status_icon", "cloud_disconnected")
 		stopCloudBlink()
 	case CloudConnectionStateConnecting:
-		_, _ = lvImgSetSrc("ui_Home_Header_Cloud_Status_Icon", "cloud.png")
-		startCloudBlink()
+		_, _ = nativeInstance.UIObjSetImageSrc("cloud_status_icon", "cloud")
+		restartCloudBlink()
 	case CloudConnectionStateConnected:
-		_, _ = lvImgSetSrc("ui_Home_Header_Cloud_Status_Icon", "cloud.png")
+		_, _ = nativeInstance.UIObjSetImageSrc("cloud_status_icon", "cloud")
 		stopCloudBlink()
 	}
+}
+
+const (
+	cloudBlinkInterval = 2 * time.Second
+	cloudBlinkDuration = 1 * time.Second
+)
+
+var (
+	cloudBlinkTicker *time.Ticker
+	cloudBlinkCancel context.CancelFunc
+	cloudBlinkLock   = sync.Mutex{}
+)
+
+func doCloudBlink(ctx context.Context) {
+	for range cloudBlinkTicker.C {
+		if cloudConnectionState != CloudConnectionStateConnecting {
+			continue
+		}
+
+		_, _ = nativeInstance.UIObjFadeOut("ui_Home_Header_Cloud_Status_Icon", uint32(cloudBlinkDuration.Milliseconds()))
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(cloudBlinkDuration):
+		}
+
+		_, _ = nativeInstance.UIObjFadeIn("ui_Home_Header_Cloud_Status_Icon", uint32(cloudBlinkDuration.Milliseconds()))
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(cloudBlinkDuration):
+		}
+	}
+}
+
+func restartCloudBlink() {
+	stopCloudBlink()
+	startCloudBlink()
 }
 
 func startCloudBlink() {
-	if cloudBlinkTicker == nil {
-		cloudBlinkTicker = time.NewTicker(2 * time.Second)
-	} else {
-		// do nothing if the blink isn't stopped
-		if cloudBlinkStopped {
-			cloudBlinkLock.Lock()
-			defer cloudBlinkLock.Unlock()
+	cloudBlinkLock.Lock()
+	defer cloudBlinkLock.Unlock()
 
-			cloudBlinkStopped = false
-			cloudBlinkTicker.Reset(2 * time.Second)
-		}
+	if cloudBlinkTicker == nil {
+		cloudBlinkTicker = time.NewTicker(cloudBlinkInterval)
+	} else {
+		cloudBlinkTicker.Reset(cloudBlinkInterval)
 	}
 
-	go func() {
-		for range cloudBlinkTicker.C {
-			if cloudConnectionState != CloudConnectionStateConnecting {
-				continue
-			}
-			_, _ = lvObjFadeOut("ui_Home_Header_Cloud_Status_Icon", 1000)
-			time.Sleep(1000 * time.Millisecond)
-			_, _ = lvObjFadeIn("ui_Home_Header_Cloud_Status_Icon", 1000)
-			time.Sleep(1000 * time.Millisecond)
-		}
-	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	cloudBlinkCancel = cancel
+
+	go doCloudBlink(ctx)
 }
 
 func stopCloudBlink() {
+	cloudBlinkLock.Lock()
+	defer cloudBlinkLock.Unlock()
+
+	if cloudBlinkCancel != nil {
+		cloudBlinkCancel()
+		cloudBlinkCancel = nil
+	}
+
 	if cloudBlinkTicker != nil {
 		cloudBlinkTicker.Stop()
 	}
-
-	cloudBlinkLock.Lock()
-	defer cloudBlinkLock.Unlock()
-	cloudBlinkStopped = true
 }
 
 var (
@@ -202,7 +175,7 @@ var (
 	waitDisplayUpdate = sync.Mutex{}
 )
 
-func requestDisplayUpdate(shouldWakeDisplay bool) {
+func requestDisplayUpdate(shouldWakeDisplay bool, reason string) {
 	displayUpdateLock.Lock()
 	defer displayUpdateLock.Unlock()
 
@@ -212,37 +185,56 @@ func requestDisplayUpdate(shouldWakeDisplay bool) {
 	}
 	go func() {
 		if shouldWakeDisplay {
-			wakeDisplay(false)
+			wakeDisplay(false, reason)
 		}
 		displayLogger.Debug().Msg("display updating")
-		//TODO: only run once regardless how many pending updates
+		// TODO: only run once regardless how many pending updates
 		updateDisplay()
 	}()
 }
 
-func waitCtrlAndRequestDisplayUpdate(shouldWakeDisplay bool) {
+func waitCtrlAndRequestDisplayUpdate(shouldWakeDisplay bool, reason string) {
 	waitDisplayUpdate.Lock()
 	defer waitDisplayUpdate.Unlock()
 
-	waitCtrlClientConnected()
-	requestDisplayUpdate(shouldWakeDisplay)
+	requestDisplayUpdate(shouldWakeDisplay, reason)
 }
 
 func updateStaticContents() {
 	//contents that never change
-	updateLabelIfChanged("ui_Home_Content_Mac", networkState.MACString())
-	systemVersion, appVersion, err := GetLocalVersion()
-	if err == nil {
-		updateLabelIfChanged("ui_About_Content_Operating_System_Version_ContentLabel", systemVersion.String())
-		updateLabelIfChanged("ui_About_Content_App_Version_Content_Label", appVersion.String())
+	if networkManager != nil {
+		nativeInstance.UpdateLabelIfChanged("home_info_mac_addr", networkManager.MACString())
 	}
 
-	updateLabelIfChanged("ui_Status_Content_Device_Id_Content_Label", GetDeviceID())
+	// get cpu info
+	if cpuInfo, err := os.ReadFile("/proc/cpuinfo"); err == nil {
+		// get the line starting with "Serial"
+		for line := range strings.SplitSeq(string(cpuInfo), "\n") {
+			if strings.HasPrefix(line, "Serial") {
+				serial := strings.SplitN(line, ":", 2)[1]
+				nativeInstance.UpdateLabelAndChangeVisibility("cpu_serial", strings.TrimSpace(serial))
+				break
+			}
+		}
+	}
+
+	// get kernel version
+	if kernelVersion, err := os.ReadFile("/proc/version"); err == nil {
+		kernelVersion := strings.TrimPrefix(string(kernelVersion), "Linux version ")
+		kernelVersion = strings.SplitN(kernelVersion, " ", 2)[0]
+		nativeInstance.UpdateLabelAndChangeVisibility("kernel_version", kernelVersion)
+	}
+
+	nativeInstance.UpdateLabelAndChangeVisibility("build_branch", version.Branch)
+	nativeInstance.UpdateLabelAndChangeVisibility("build_date", version.BuildDate)
+	nativeInstance.UpdateLabelAndChangeVisibility("golang_version", version.GoVersion)
+
+	// nativeInstance.UpdateLabelAndChangeVisibility("boot_screen_device_id", GetDeviceID())
 }
 
 // setDisplayBrightness sets /sys/class/backlight/backlight/brightness to alter
 // the backlight brightness of the JetKVM hardware's display.
-func setDisplayBrightness(brightness int) error {
+func setDisplayBrightness(brightness int, reason string) error {
 	// NOTE: The actual maximum value for this is 255, but out-of-the-box, the value is set to 64.
 	// The maximum set here is set to 100 to reduce the risk of drawing too much power (and besides, 255 is very bright!).
 	if brightness > 100 || brightness < 0 {
@@ -261,14 +253,14 @@ func setDisplayBrightness(brightness int) error {
 		return err
 	}
 
-	displayLogger.Info().Int("brightness", brightness).Msg("set brightness")
+	displayLogger.Info().Int("brightness", brightness).Str("reason", reason).Msg("set brightness")
 	return nil
 }
 
 // tick_displayDim() is called when when dim ticker expires, it simply reduces the brightness
 // of the display by half of the max brightness.
 func tick_displayDim() {
-	err := setDisplayBrightness(config.DisplayMaxBrightness / 2)
+	err := setDisplayBrightness(config.DisplayMaxBrightness/2, "tick_display_dim")
 	if err != nil {
 		displayLogger.Warn().Err(err).Msg("failed to dim display")
 	}
@@ -281,7 +273,7 @@ func tick_displayDim() {
 // tick_displayOff() is called when the off ticker expires, it turns off the display
 // by setting the brightness to zero.
 func tick_displayOff() {
-	err := setDisplayBrightness(0)
+	err := setDisplayBrightness(0, "tick_display_off")
 	if err != nil {
 		displayLogger.Warn().Err(err).Msg("failed to turn off display")
 	}
@@ -294,7 +286,7 @@ func tick_displayOff() {
 // wakeDisplay sets the display brightness back to config.DisplayMaxBrightness and stores the time the display
 // last woke, ready for displayTimeoutTick to put the display back in the dim/off states.
 // Set force to true to skip the backlight state check, this should be done if altering the tickers.
-func wakeDisplay(force bool) {
+func wakeDisplay(force bool, reason string) {
 	if backlightState == 0 && !force {
 		return
 	}
@@ -304,7 +296,11 @@ func wakeDisplay(force bool) {
 		return
 	}
 
-	err := setDisplayBrightness(config.DisplayMaxBrightness)
+	if reason == "" {
+		reason = "wake_display"
+	}
+
+	err := setDisplayBrightness(config.DisplayMaxBrightness, reason)
 	if err != nil {
 		displayLogger.Warn().Err(err).Msg("failed to wake display")
 	}
@@ -319,34 +315,6 @@ func wakeDisplay(force bool) {
 	backlightState = 0
 }
 
-// watchTsEvents monitors the touchscreen for events and simply calls wakeDisplay() to ensure the
-// touchscreen interface still works even with LCD dimming/off.
-// TODO: This is quite a hack, really we should be getting an event from jetkvm_native, or the whole display backlight
-// control should be hoisted up to jetkvm_native.
-func watchTsEvents() {
-	ts, err := os.OpenFile(touchscreenDevice, os.O_RDONLY, 0666)
-	if err != nil {
-		displayLogger.Warn().Err(err).Msg("failed to open touchscreen device")
-		return
-	}
-
-	defer ts.Close()
-
-	// This buffer is set to 24 bytes as that's the normal size of events on /dev/input
-	// Reference: https://www.kernel.org/doc/Documentation/input/input.txt
-	// This could potentially be set higher, to require multiple events to wake the display.
-	buf := make([]byte, 24)
-	for {
-		_, err := ts.Read(buf)
-		if err != nil {
-			displayLogger.Warn().Err(err).Msg("failed to read from touchscreen device")
-			return
-		}
-
-		wakeDisplay(false)
-	}
-}
-
 // startBacklightTickers starts the two tickers for dimming and switching off the display
 // if they're not already set. This is done separately to the init routine as the "never dim"
 // option has the value set to zero, but time.NewTicker only accept positive values.
@@ -354,7 +322,7 @@ func startBacklightTickers() {
 	// Don't start the tickers if the display is switched off.
 	// Set the display to off if that's the case.
 	if config.DisplayMaxBrightness == 0 {
-		_ = setDisplayBrightness(0)
+		_ = setDisplayBrightness(0, "display_disabled")
 		return
 	}
 
@@ -372,11 +340,8 @@ func startBacklightTickers() {
 		dimTicker = time.NewTicker(time.Duration(config.DisplayDimAfterSec) * time.Second)
 
 		go func() {
-			for { //nolint:staticcheck
-				select {
-				case <-dimTicker.C:
-					tick_displayDim()
-				}
+			for range dimTicker.C {
+				tick_displayDim()
 			}
 		}()
 	}
@@ -386,11 +351,8 @@ func startBacklightTickers() {
 		offTicker = time.NewTicker(time.Duration(config.DisplayOffAfterSec) * time.Second)
 
 		go func() {
-			for { //nolint:staticcheck
-				select {
-				case <-offTicker.C:
-					tick_displayOff()
-				}
+			for range offTicker.C {
+				tick_displayOff()
 			}
 		}()
 	}
@@ -398,17 +360,12 @@ func startBacklightTickers() {
 
 func initDisplay() {
 	go func() {
-		waitCtrlClientConnected()
 		displayLogger.Info().Msg("setting initial display contents")
 		time.Sleep(500 * time.Millisecond)
-		_, _ = lvDispSetRotation(config.DisplayRotation)
 		updateStaticContents()
 		displayInited = true
 		displayLogger.Info().Msg("display inited")
 		startBacklightTickers()
-		wakeDisplay(true)
-		requestDisplayUpdate(true)
+		requestDisplayUpdate(true, "init_display")
 	}()
-
-	go watchTsEvents()
 }

@@ -170,6 +170,7 @@ func setCloudConnectionState(state CloudConnectionState) {
 
 	go waitCtrlAndRequestDisplayUpdate(
 		previousState != state,
+		"set_cloud_connection_state",
 	)
 }
 
@@ -487,6 +488,10 @@ func handleSessionRequest(
 
 	cloudLogger.Info().Interface("session", session).Msg("new session accepted")
 	cloudLogger.Trace().Interface("session", session).Msg("new session accepted")
+
+	// Cancel any ongoing keyboard macro when session changes
+	cancelKeyboardMacro()
+
 	currentSession = session
 	_ = wsjson.Write(context.Background(), c, gin.H{"type": "answer", "data": sd})
 	return nil
@@ -501,7 +506,7 @@ func RunWebsocketClient() {
 		}
 
 		// If the network is not up, well, we can't connect to the cloud.
-		if !networkState.IsOnline() {
+		if !networkManager.IsOnline() {
 			cloudLogger.Warn().Msg("waiting for network to be online, will retry in 3 seconds")
 			time.Sleep(3 * time.Second)
 			continue

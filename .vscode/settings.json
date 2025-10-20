@@ -1,3 +1,14 @@
 {
-  "tailwindCSS.classFunctions": ["cva", "cx"]
+  "tailwindCSS.classFunctions": [
+    "cva",
+    "cx"
+  ],
+  "gopls": {
+    "build.buildFlags": [
+      "-tags",
+      "synctrace"
+    ]
+  },
+  "git.ignoreLimitWarning": true,
+  "cmake.sourceDirectory": "/workspaces/kvm-static-ip/internal/native/cgo"
 }

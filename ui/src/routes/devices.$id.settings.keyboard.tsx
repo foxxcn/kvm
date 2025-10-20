@@ -3,12 +3,11 @@ import { useCallback, useEffect } from "react";
 import { useSettingsStore } from "@/hooks/stores";
 import { JsonRpcResponse, useJsonRpc } from "@/hooks/useJsonRpc";
 import useKeyboardLayout from "@/hooks/useKeyboardLayout";
+import { SettingsItem } from "@components/SettingsItem";
 import { SettingsPageHeader } from "@components/SettingsPageheader";
 import { Checkbox } from "@/components/Checkbox";
 import { SelectMenuBasic } from "@/components/SelectMenuBasic";
 import notifications from "@/notifications";
-
-import { SettingsItem } from "./devices.$id.settings";
 
 export default function SettingsKeyboardRoute() {
   const { setKeyboardLayout } = useSettingsStore();
@@ -53,7 +52,7 @@ export default function SettingsKeyboardRoute() {
 
       <div className="space-y-4">
         <SettingsItem
-          title="Paste text"
+          title="Keyboard Layout"
           description="Keyboard layout of target operating system"
         >
           <SelectMenuBasic
@@ -66,7 +65,7 @@ export default function SettingsKeyboardRoute() {
           />
         </SettingsItem>
         <p className="text-xs text-slate-600 dark:text-slate-400">
-          Pasting text sends individual key strokes to the target device. The keyboard layout determines which key codes are being sent. Ensure that the keyboard layout in JetKVM matches the settings in the operating system.
+          The virtual keyboard, paste text, and keyboard macros send individual key strokes to the target device. The keyboard layout determines which key codes are being sent. Ensure that the keyboard layout in JetKVM matches the settings in the operating system.
         </p>
       </div>
 

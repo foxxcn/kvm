@@ -34,6 +34,9 @@ func Main() {
 	go runWatchdog()
 	go confirmCurrentSystem()
 
+	initDisplay()
+	initNative(systemVersionLocal, appVersionLocal)
+
 	http.DefaultClient.Timeout = 1 * time.Minute
 
 	err = rootcerts.UpdateDefaultTransport()
@@ -60,21 +63,7 @@ func Main() {
 		os.Exit(1)
 	}
 
-	// Initialize native ctrl socket server
-	StartNativeCtrlSocketServer()
-
-	// Initialize native video socket server
-	StartNativeVideoSocketServer()
-
 	initPrometheus()
-
-	go func() {
-		err = ExtractAndRunNativeBin()
-		if err != nil {
-			logger.Warn().Err(err).Msg("failed to extract and run native bin")
-			//TODO: prepare an error message screen buffer to show on kvm screen
-		}
-	}()
 
 	// initialize usb gadget
 	initUsbGadget()
@@ -87,8 +76,8 @@ func Main() {
 	}
 	initJiggler()
 
-	// initialize display
-	initDisplay()
+	// start video sleep mode timer
+	startVideoSleepModeTicker()
 
 	go func() {
 		time.Sleep(15 * time.Minute)
@@ -97,16 +86,25 @@ func Main() {
 			if !config.AutoUpdateEnabled {
 				return
 			}
+
+			if isTimeSyncNeeded() || !timeSync.IsSyncSuccess() {
+				logger.Debug().Msg("system time is not synced, will retry in 30 seconds")
+				time.Sleep(30 * time.Second)
+				continue
+			}
+
 			if currentSession != nil {
 				logger.Debug().Msg("skipping update since a session is active")
 				time.Sleep(1 * time.Minute)
 				continue
 			}
+
 			includePreRelease := config.IncludePreRelease
 			err = TryUpdate(context.Background(), GetDeviceID(), includePreRelease)
 			if err != nil {
 				logger.Warn().Err(err).Msg("failed to auto update")
 			}
+
 			time.Sleep(1 * time.Hour)
 		}
 	}()

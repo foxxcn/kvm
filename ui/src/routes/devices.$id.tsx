@@ -1,8 +1,6 @@
 import { lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  LoaderFunctionArgs,
   Outlet,
-  Params,
   redirect,
   useLoaderData,
   useLocation,
@@ -10,7 +8,8 @@ import {
   useOutlet,
   useParams,
   useSearchParams,
-} from "react-router-dom";
+} from "react-router";
+import type { LoaderFunction, LoaderFunctionArgs, Params } from "react-router";
 import { useInterval } from "usehooks-ts";
 import { FocusTrap } from "focus-trap-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -20,14 +19,13 @@ import { CLOUD_API, DEVICE_API } from "@/ui.config";
 import api from "@/api";
 import { checkAuth, isInCloud, isOnDevice } from "@/main";
 import { cx } from "@/cva.config";
-import notifications from "@/notifications";
 import {
   KeyboardLedState,
   KeysDownState,
   NetworkState,
   OtaState,
+  PostRebootAction,
   USBStates,
-  useDeviceStore,
   useHidStore,
   useNetworkStateStore,
   User,
@@ -43,16 +41,17 @@ const ConnectionStatsSidebar = lazy(() => import('@/components/sidebar/connectio
 const Terminal = lazy(() => import('@components/Terminal'));
 const UpdateInProgressStatusCard = lazy(() => import("@/components/UpdateInProgressStatusCard"));
 import Modal from "@/components/Modal";
-import { JsonRpcRequest, JsonRpcResponse, useJsonRpc } from "@/hooks/useJsonRpc";
+import { JsonRpcRequest, JsonRpcResponse, RpcMethodNotFound, useJsonRpc } from "@/hooks/useJsonRpc";
 import {
   ConnectionFailedOverlay,
   LoadingConnectionOverlay,
   PeerConnectionDisconnectedOverlay,
+  RebootingOverlay,
 } from "@/components/VideoOverlay";
 import { useDeviceUiNavigation } from "@/hooks/useAppNavigation";
 import { FeatureFlagProvider } from "@/providers/FeatureFlagProvider";
 import { DeviceStatus } from "@routes/welcome-local";
-import { SystemVersionInfo } from "@routes/devices.$id.settings.general.update";
+import { useVersion } from "@/hooks/useVersion";
 
 interface LocalLoaderResp {
   authMode: "password" | "noPassword" | null;
@@ -112,7 +111,7 @@ const cloudLoader = async (params: Params<string>): Promise<CloudLoaderResp> => 
   return { user, iceConfig, deviceName: device.name || device.id };
 };
 
-const loader = ({ params }: LoaderFunctionArgs) => {
+const loader: LoaderFunction = ({ params }: LoaderFunctionArgs) => {
   return import.meta.env.MODE === "device" ? deviceLoader() : cloudLoader(params);
 };
 
@@ -125,17 +124,20 @@ export default function KvmIdRoute() {
   const authMode = "authMode" in loaderResp ? loaderResp.authMode : null;
 
   const params = useParams() as { id: string };
-  const { sidebarView, setSidebarView, disableVideoFocusTrap } = useUiStore();
-  const [ queryParams, setQueryParams ] = useSearchParams();
+  const { sidebarView, setSidebarView, disableVideoFocusTrap, rebootState, setRebootState } = useUiStore();
+  const [queryParams, setQueryParams] = useSearchParams();
 
-  const { 
+  const {
     peerConnection, setPeerConnection,
     peerConnectionState, setPeerConnectionState,
     setMediaStream,
     setRpcDataChannel,
     isTurnServerInUse, setTurnServerInUse,
     rpcDataChannel,
-    setTransceiver
+    setTransceiver,
+    setRpcHidChannel,
+    setRpcHidUnreliableNonOrderedChannel,
+    setRpcHidUnreliableChannel,
   } = useRTCStore();
 
   const location = useLocation();
@@ -241,7 +243,7 @@ export default function KvmIdRoute() {
     {
       heartbeat: true,
       retryOnError: true,
-      reconnectAttempts: 15,
+      reconnectAttempts: 2000,
       reconnectInterval: 1000,
       onReconnectStop: () => {
         console.debug("Reconnect stopped");
@@ -250,8 +252,7 @@ export default function KvmIdRoute() {
 
       shouldReconnect(event) {
         console.debug("[Websocket] shouldReconnect", event);
-        // TODO: Why true?
-        return true;
+        return !isLegacySignalingEnabled.current;
       },
 
       onClose(event) {
@@ -265,6 +266,16 @@ export default function KvmIdRoute() {
       },
       onOpen() {
         console.debug("[Websocket] onOpen");
+        // We want to clear the reboot state when the websocket connection is opened
+        // Currently the flow is:
+        // 1. User clicks reboot
+        // 2. Device sends event 'willReboot'
+        // 3. We set the reboot state
+        // 4. Reboot modal is shown
+        // 5. WS tries to reconnect
+        // 6. WS reconnects
+        // 7. This function is called and now we clear the reboot state
+        setRebootState({ isRebooting: false, postRebootAction: null });
       },
 
       onMessage: message => {
@@ -340,10 +351,7 @@ export default function KvmIdRoute() {
           peerConnection.addIceCandidate(candidate);
         }
       },
-    },
-
-    // Don't even retry once we declare failure
-    !connectionFailed && isLegacySignalingEnabled.current === false,
+    }
   );
 
   const sendWebRTCSignal = useCallback(
@@ -482,6 +490,30 @@ export default function KvmIdRoute() {
       setRpcDataChannel(rpcDataChannel);
     };
 
+    const rpcHidChannel = pc.createDataChannel("hidrpc");
+    rpcHidChannel.binaryType = "arraybuffer";
+    rpcHidChannel.onopen = () => {
+      setRpcHidChannel(rpcHidChannel);
+    };
+
+    const rpcHidUnreliableChannel = pc.createDataChannel("hidrpc-unreliable-ordered", {
+      ordered: true,
+      maxRetransmits: 0,
+    });
+    rpcHidUnreliableChannel.binaryType = "arraybuffer";
+    rpcHidUnreliableChannel.onopen = () => {
+      setRpcHidUnreliableChannel(rpcHidUnreliableChannel);
+    };
+
+    const rpcHidUnreliableNonOrderedChannel = pc.createDataChannel("hidrpc-unreliable-nonordered", {
+      ordered: false,
+      maxRetransmits: 0,
+    });
+    rpcHidUnreliableNonOrderedChannel.binaryType = "arraybuffer";
+    rpcHidUnreliableNonOrderedChannel.onopen = () => {
+      setRpcHidUnreliableNonOrderedChannel(rpcHidUnreliableNonOrderedChannel);
+    };
+
     setPeerConnection(pc);
   }, [
     cleanupAndStopReconnecting,
@@ -492,6 +524,9 @@ export default function KvmIdRoute() {
     setPeerConnection,
     setPeerConnectionState,
     setRpcDataChannel,
+    setRpcHidChannel,
+    setRpcHidUnreliableNonOrderedChannel,
+    setRpcHidUnreliableChannel,
     setTransceiver,
   ]);
 
@@ -567,16 +602,18 @@ export default function KvmIdRoute() {
     api.POST(`${CLOUD_API}/webrtc/turn_activity`, {
       bytesReceived: bytesReceivedDelta,
       bytesSent: bytesSentDelta,
+    }).catch(() => {
+      // we don't care about errors here, but we don't want unhandled promise rejections
     });
   }, 10000);
 
-  const { setNetworkState} = useNetworkStateStore();
+  const { setNetworkState } = useNetworkStateStore();
   const { setHdmiState } = useVideoStore();
-  const { 
-    keyboardLedState,  setKeyboardLedState,
+  const {
+    keyboardLedState, setKeyboardLedState,
     keysDownState, setKeysDownState, setUsbState,
-    setkeyPressReportApiAvailable
   } = useHidStore();
+  const setHidRpcDisabled = useRTCStore(state => state.setHidRpcDisabled);
 
   const [hasUpdated, setHasUpdated] = useState(false);
   const { navigateTo } = useDeviceUiNavigation();
@@ -613,7 +650,6 @@ export default function KvmIdRoute() {
       const downState = resp.params as KeysDownState;
       console.debug("Setting key down state:", downState);
       setKeysDownState(downState);
-      setkeyPressReportApiAvailable(true); // if they returned a keyDownState, we know they also support keyPressReport
     }
 
     if (resp.method === "otaState") {
@@ -639,6 +675,13 @@ export default function KvmIdRoute() {
         currentUrl.searchParams.set("updateSuccess", "true");
         window.location.href = currentUrl.toString();
       }
+    }
+
+    if (resp.method === "willReboot") {
+      const postRebootAction = resp.params as unknown as PostRebootAction;
+      console.debug("Setting reboot state", postRebootAction);
+      setRebootState({ isRebooting: true, postRebootAction });
+      navigateTo("/");
     }
   }
 
@@ -687,10 +730,10 @@ export default function KvmIdRoute() {
     send("getKeyDownState", {}, (resp: JsonRpcResponse) => {
       if ("error" in resp) {
         // -32601 means the method is not supported
-        if (resp.error.code === -32601) {
+        if (resp.error.code === RpcMethodNotFound) {
           // if we don't support key down state, we know key press is also not available
           console.warn("Failed to get key down state, switching to old-school", resp.error);
-          setkeyPressReportApiAvailable(false);
+          setHidRpcDisabled(true);
         } else {
           console.error("Failed to get key down state", resp.error);
         }
@@ -698,11 +741,10 @@ export default function KvmIdRoute() {
         const downState = resp.result as KeysDownState;
         console.debug("Keyboard key down state", downState);
         setKeysDownState(downState);
-        setkeyPressReportApiAvailable(true); // if they returned a keyDownState, we know they also support keyPressReport
       }
       setNeedKeyDownState(false);
     });
-  }, [keysDownState, needKeyDownState, rpcDataChannel?.readyState, send, setkeyPressReportApiAvailable, setKeysDownState]);
+  }, [keysDownState, needKeyDownState, rpcDataChannel?.readyState, send, setKeysDownState, setHidRpcDisabled]);
 
   // When the update is successful, we need to refresh the client javascript and show a success modal
   useEffect(() => {
@@ -731,28 +773,23 @@ export default function KvmIdRoute() {
     if (location.pathname !== "/other-session") navigateTo("/");
   }, [navigateTo, location.pathname]);
 
-  const { appVersion, setAppVersion, setSystemVersion}  = useDeviceStore();
+  const { appVersion, getLocalVersion } = useVersion();
 
   useEffect(() => {
     if (appVersion) return;
 
-    send("getUpdateStatus", {}, (resp: JsonRpcResponse) => {
-      if ("error" in resp) {
-        notifications.error(`Failed to get device version: ${resp.error}`);
-        return
-      }
-
-      const result = resp.result as SystemVersionInfo;
-      if (result.error) {
-        notifications.error(`Failed to get device version: ${result.error}`);
-      }
-
-      setAppVersion(result.local.appVersion);
-      setSystemVersion(result.local.systemVersion);
-    });
-  }, [appVersion, send, setAppVersion, setSystemVersion]);
+    getLocalVersion();
+  }, [appVersion, getLocalVersion]);
 
   const ConnectionStatusElement = useMemo(() => {
+    const isOtherSession = location.pathname.includes("other-session");
+    if (isOtherSession) return null;
+
+    // Rebooting takes priority over connection status
+    if (rebootState?.isRebooting) {
+      return <RebootingOverlay show={true} postRebootAction={rebootState.postRebootAction} />;
+    }
+
     const hasConnectionFailed =
       connectionFailed || ["failed", "closed"].includes(peerConnectionState ?? "");
 
@@ -762,9 +799,6 @@ export default function KvmIdRoute() {
 
     const isDisconnected = peerConnectionState === "disconnected";
 
-    const isOtherSession = location.pathname.includes("other-session");
-
-    if (isOtherSession) return null;
     if (peerConnectionState === "connected") return null;
     if (isDisconnected) {
       return <PeerConnectionDisconnectedOverlay show={true} />;
@@ -780,14 +814,7 @@ export default function KvmIdRoute() {
     }
 
     return null;
-  }, [
-    connectionFailed,
-    loadingMessage,
-    location.pathname,
-    peerConnection,
-    peerConnectionState,
-    setupPeerConnection,
-  ]);
+  }, [location.pathname, rebootState?.isRebooting, rebootState?.postRebootAction, connectionFailed, peerConnectionState, peerConnection, setupPeerConnection, loadingMessage]);
 
   return (
     <FeatureFlagProvider appVersion={appVersion}>
@@ -829,7 +856,7 @@ export default function KvmIdRoute() {
           />
 
           <div className="relative flex h-full w-full overflow-hidden">
-            <WebRTCVideo />
+            <WebRTCVideo hasConnectionIssues={!!ConnectionStatusElement} />
             <div
               style={{ animationDuration: "500ms" }}
               className="animate-slideUpFade pointer-events-none absolute inset-0 flex items-center justify-center p-4"

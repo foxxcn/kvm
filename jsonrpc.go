@@ -1,6 +1,7 @@
 package kvm
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,13 +11,16 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/pion/webrtc/v4"
 	"github.com/rs/zerolog"
 	"go.bug.st/serial"
 
+	"github.com/jetkvm/kvm/internal/hidrpc"
 	"github.com/jetkvm/kvm/internal/usbgadget"
+	"github.com/jetkvm/kvm/internal/utils"
 )
 
 type JSONRPCRequest struct {
@@ -83,7 +87,7 @@ func writeJSONRPCEvent(event string, params any, session *Session) {
 		Str("data", requestString).
 		Logger()
 
-	scopedLogger.Info().Msg("sending JSONRPC event")
+	scopedLogger.Trace().Msg("sending JSONRPC event")
 
 	err = session.RPCChannel.SendText(requestString)
 	if err != nil {
@@ -171,6 +175,12 @@ func rpcGetDeviceID() (string, error) {
 func rpcReboot(force bool) error {
 	logger.Info().Msg("Got reboot request from JSONRPC, rebooting...")
 
+	writeJSONRPCEvent("willReboot", nil, currentSession)
+
+	// Wait for the JSONRPCEvent to be sent
+	time.Sleep(1 * time.Second)
+	nativeInstance.SwitchToScreenIfDifferent("rebooting_screen")
+
 	args := []string{}
 	if force {
 		args = append(args, "-f")
@@ -180,6 +190,7 @@ func rpcReboot(force bool) error {
 	err := cmd.Start()
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to reboot")
+		switchToMainScreen()
 		return fmt.Errorf("failed to reboot: %w", err)
 	}
 
@@ -200,7 +211,7 @@ func rpcGetStreamQualityFactor() (float64, error) {
 
 func rpcSetStreamQualityFactor(factor float64) error {
 	logger.Info().Float64("factor", factor).Msg("Setting stream quality factor")
-	var _, err = CallCtrlAction("set_video_quality_factor", map[string]any{"quality_factor": factor})
+	err := nativeInstance.VideoSetQualityFactor(factor)
 	if err != nil {
 		return err
 	}
@@ -222,25 +233,20 @@ func rpcSetAutoUpdateState(enabled bool) (bool, error) {
 }
 
 func rpcGetEDID() (string, error) {
-	resp, err := CallCtrlAction("get_edid", nil)
+	resp, err := nativeInstance.VideoGetEDID()
 	if err != nil {
 		return "", err
 	}
-	edid, ok := resp.Result["edid"]
-	if ok {
-		return edid.(string), nil
-	}
-	return "", errors.New("EDID not found in response")
+	return resp, nil
 }
 
 func rpcSetEDID(edid string) error {
 	if edid == "" {
 		logger.Info().Msg("Restoring EDID to default")
-		edid = "00ffffffffffff0052620188008888881c150103800000780a0dc9a05747982712484c00000001010101010101010101010101010101023a801871382d40582c4500c48e2100001e011d007251d01e206e285500c48e2100001e000000fc00543734392d6648443732300a20000000fd00147801ff1d000a202020202020017b"
 	} else {
 		logger.Info().Str("edid", edid).Msg("Setting EDID")
 	}
-	_, err := CallCtrlAction("set_edid", map[string]any{"edid": edid})
+	err := nativeInstance.VideoSetEDID(edid)
 	if err != nil {
 		return err
 	}
@@ -249,6 +255,10 @@ func rpcSetEDID(edid string) error {
 	config.EdidString = edid
 	_ = SaveConfig()
 	return nil
+}
+
+func rpcGetVideoLogStatus() (string, error) {
+	return nativeInstance.VideoLogStatus()
 }
 
 func rpcGetDevChannelState() (bool, error) {
@@ -278,6 +288,17 @@ func rpcGetUpdateStatus() (*UpdateStatus, error) {
 	return updateStatus, nil
 }
 
+func rpcGetLocalVersion() (*LocalMetadata, error) {
+	systemVersion, appVersion, err := GetLocalVersion()
+	if err != nil {
+		return nil, fmt.Errorf("error getting local version: %w", err)
+	}
+	return &LocalMetadata{
+		AppVersion:    appVersion.String(),
+		SystemVersion: systemVersion.String(),
+	}, nil
+}
+
 func rpcTryUpdate() error {
 	includePreRelease := config.IncludePreRelease
 	go func() {
@@ -290,14 +311,25 @@ func rpcTryUpdate() error {
 }
 
 func rpcSetDisplayRotation(params DisplayRotationSettings) error {
-	var err error
-	_, err = lvDispSetRotation(params.Rotation)
-	if err == nil {
-		config.DisplayRotation = params.Rotation
-		if err := SaveConfig(); err != nil {
-			return fmt.Errorf("failed to save config: %w", err)
-		}
+	currentRotation := config.DisplayRotation
+	if currentRotation == params.Rotation {
+		return nil
 	}
+
+	err := config.SetDisplayRotation(params.Rotation)
+	if err != nil {
+		return err
+	}
+
+	_, err = nativeInstance.DisplaySetRotation(config.GetDisplayRotation())
+	if err != nil {
+		return err
+	}
+
+	if err := SaveConfig(); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
 	return err
 }
 
@@ -341,7 +373,7 @@ func rpcSetBacklightSettings(params BacklightSettings) error {
 	// are reset to the new settings, and will bring the display up to maxBrightness.
 	// Calling with force set to true, to ignore the current state of the display, and force
 	// it to reset the tickers.
-	wakeDisplay(true)
+	wakeDisplay(true, "backlight_settings_changed")
 	return nil
 }
 
@@ -429,21 +461,27 @@ func rpcGetSSHKeyState() (string, error) {
 }
 
 func rpcSetSSHKeyState(sshKey string) error {
-	if sshKey != "" {
-		// Create directory if it doesn't exist
-		if err := os.MkdirAll(sshKeyDir, 0700); err != nil {
-			return fmt.Errorf("failed to create SSH key directory: %w", err)
-		}
-
-		// Write SSH key to file
-		if err := os.WriteFile(sshKeyFile, []byte(sshKey), 0600); err != nil {
-			return fmt.Errorf("failed to write SSH key: %w", err)
-		}
-	} else {
+	if sshKey == "" {
 		// Remove SSH key file if empty string is provided
 		if err := os.Remove(sshKeyFile); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("failed to remove SSH key file: %w", err)
 		}
+		return nil
+	}
+
+	// Validate SSH key
+	if err := utils.ValidateSSHKey(sshKey); err != nil {
+		return err
+	}
+
+	// Create directory if it doesn't exist
+	if err := os.MkdirAll(sshKeyDir, 0700); err != nil {
+		return fmt.Errorf("failed to create SSH key directory: %w", err)
+	}
+
+	// Write SSH key to file
+	if err := os.WriteFile(sshKeyFile, []byte(sshKey), 0600); err != nil {
+		return fmt.Errorf("failed to write SSH key: %w", err)
 	}
 
 	return nil
@@ -685,7 +723,8 @@ func rpcSetWakeOnLanDevices(params SetWakeOnLanDevicesParams) error {
 }
 
 func rpcResetConfig() error {
-	config = defaultConfig
+	defaultConfig := getDefaultConfig()
+	config = &defaultConfig
 	if err := SaveConfig(); err != nil {
 		return fmt.Errorf("failed to reset config: %w", err)
 	}
@@ -1049,6 +1088,103 @@ func rpcSetLocalLoopbackOnly(enabled bool) error {
 	return nil
 }
 
+var (
+	keyboardMacroCancel context.CancelFunc
+	keyboardMacroLock   sync.Mutex
+)
+
+// cancelKeyboardMacro cancels any ongoing keyboard macro execution
+func cancelKeyboardMacro() {
+	keyboardMacroLock.Lock()
+	defer keyboardMacroLock.Unlock()
+
+	if keyboardMacroCancel != nil {
+		keyboardMacroCancel()
+		logger.Info().Msg("canceled keyboard macro")
+		keyboardMacroCancel = nil
+	}
+}
+
+func setKeyboardMacroCancel(cancel context.CancelFunc) {
+	keyboardMacroLock.Lock()
+	defer keyboardMacroLock.Unlock()
+
+	keyboardMacroCancel = cancel
+}
+
+func rpcExecuteKeyboardMacro(macro []hidrpc.KeyboardMacroStep) error {
+	cancelKeyboardMacro()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	setKeyboardMacroCancel(cancel)
+
+	s := hidrpc.KeyboardMacroState{
+		State:   true,
+		IsPaste: true,
+	}
+
+	if currentSession != nil {
+		currentSession.reportHidRPCKeyboardMacroState(s)
+	}
+
+	err := rpcDoExecuteKeyboardMacro(ctx, macro)
+
+	setKeyboardMacroCancel(nil)
+
+	s.State = false
+	if currentSession != nil {
+		currentSession.reportHidRPCKeyboardMacroState(s)
+	}
+
+	return err
+}
+
+func rpcCancelKeyboardMacro() {
+	cancelKeyboardMacro()
+}
+
+var keyboardClearStateKeys = make([]byte, hidrpc.HidKeyBufferSize)
+
+func isClearKeyStep(step hidrpc.KeyboardMacroStep) bool {
+	return step.Modifier == 0 && bytes.Equal(step.Keys, keyboardClearStateKeys)
+}
+
+func rpcDoExecuteKeyboardMacro(ctx context.Context, macro []hidrpc.KeyboardMacroStep) error {
+	logger.Debug().Interface("macro", macro).Msg("Executing keyboard macro")
+
+	for i, step := range macro {
+		delay := time.Duration(step.Delay) * time.Millisecond
+
+		err := rpcKeyboardReport(step.Modifier, step.Keys)
+		if err != nil {
+			logger.Warn().Err(err).Msg("failed to execute keyboard macro")
+			return err
+		}
+
+		// notify the device that the keyboard state is being cleared
+		if isClearKeyStep(step) {
+			gadget.UpdateKeysDown(0, keyboardClearStateKeys)
+		}
+
+		// Use context-aware sleep that can be cancelled
+		select {
+		case <-time.After(delay):
+			// Sleep completed normally
+		case <-ctx.Done():
+			// make sure keyboard state is reset
+			err := rpcKeyboardReport(0, keyboardClearStateKeys)
+			if err != nil {
+				logger.Warn().Err(err).Msg("failed to reset keyboard state")
+			}
+
+			logger.Debug().Int("step", i).Msg("Keyboard macro cancelled during sleep")
+			return ctx.Err()
+		}
+	}
+
+	return nil
+}
+
 var rpcHandlers = map[string]RPCHandler{
 	"ping":                   {Func: rpcPing},
 	"reboot":                 {Func: rpcReboot, Params: []string{"force"}},
@@ -1059,10 +1195,10 @@ var rpcHandlers = map[string]RPCHandler{
 	"getNetworkSettings":     {Func: rpcGetNetworkSettings},
 	"setNetworkSettings":     {Func: rpcSetNetworkSettings, Params: []string{"settings"}},
 	"renewDHCPLease":         {Func: rpcRenewDHCPLease},
-	"keyboardReport":         {Func: rpcKeyboardReport, Params: []string{"modifier", "keys"}},
 	"getKeyboardLedState":    {Func: rpcGetKeyboardLedState},
-	"keypressReport":         {Func: rpcKeypressReport, Params: []string{"key", "press"}},
 	"getKeyDownState":        {Func: rpcGetKeysDownState},
+	"keyboardReport":         {Func: rpcKeyboardReport, Params: []string{"modifier", "keys"}},
+	"keypressReport":         {Func: rpcKeypressReport, Params: []string{"key", "press"}},
 	"absMouseReport":         {Func: rpcAbsMouseReport, Params: []string{"x", "y", "buttons"}},
 	"relMouseReport":         {Func: rpcRelMouseReport, Params: []string{"dx", "dy", "buttons"}},
 	"wheelReport":            {Func: rpcWheelReport, Params: []string{"wheelY"}},
@@ -1082,8 +1218,12 @@ var rpcHandlers = map[string]RPCHandler{
 	"setAutoUpdateState":     {Func: rpcSetAutoUpdateState, Params: []string{"enabled"}},
 	"getEDID":                {Func: rpcGetEDID},
 	"setEDID":                {Func: rpcSetEDID, Params: []string{"edid"}},
+	"getVideoLogStatus":      {Func: rpcGetVideoLogStatus},
+	"getVideoSleepMode":      {Func: rpcGetVideoSleepMode},
+	"setVideoSleepMode":      {Func: rpcSetVideoSleepMode, Params: []string{"duration"}},
 	"getDevChannelState":     {Func: rpcGetDevChannelState},
 	"setDevChannelState":     {Func: rpcSetDevChannelState, Params: []string{"enabled"}},
+	"getLocalVersion":        {Func: rpcGetLocalVersion},
 	"getUpdateStatus":        {Func: rpcGetUpdateStatus},
 	"tryUpdate":              {Func: rpcTryUpdate},
 	"getDevModeState":        {Func: rpcGetDevModeState},

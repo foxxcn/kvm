@@ -1,4 +1,5 @@
-import { useLoaderData, useNavigate } from "react-router-dom";
+import { useLoaderData, useNavigate } from "react-router";
+import type { LoaderFunction } from "react-router";
 import { ShieldCheckIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 
@@ -8,6 +9,7 @@ import { GridCard } from "@/components/Card";
 import { Button, LinkButton } from "@/components/Button";
 import { InputFieldWithLabel } from "@/components/InputField";
 import { SelectMenuBasic } from "@/components/SelectMenuBasic";
+import { SettingsItem } from "@components/SettingsItem";
 import { SettingsSectionHeader } from "@/components/SettingsSectionHeader";
 import { useDeviceUiNavigation } from "@/hooks/useAppNavigation";
 import notifications from "@/notifications";
@@ -17,7 +19,6 @@ import { isOnDevice } from "@/main";
 import { TextAreaWithLabel } from "@components/TextArea";
 
 import { LocalDevice } from "./devices.$id";
-import { SettingsItem } from "./devices.$id.settings";
 import { CloudState } from "./adopt";
 
 export interface TLSState {
@@ -26,7 +27,7 @@ export interface TLSState {
   privateKey?: string;
 }
 
-const loader = async () => {
+const loader: LoaderFunction = async () => {
   if (isOnDevice) {
     const status = await api
       .GET(`${DEVICE_API}/device`)

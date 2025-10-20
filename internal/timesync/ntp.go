@@ -3,26 +3,83 @@ package timesync
 import (
 	"context"
 	"math/rand/v2"
+	"net"
 	"strconv"
 	"time"
 
 	"github.com/beevik/ntp"
 )
 
-var defaultNTPServers = []string{
+var DefaultNTPServerIPs = []string{
+	// These servers are known by static IP and as such don't need DNS lookups
+	// These are from Google and Cloudflare since if they're down, the internet
+	// is broken anyway
+	"162.159.200.1",      // time.cloudflare.com IPv4
+	"162.159.200.123",    // time.cloudflare.com IPv4
+	"2606:4700:f1::1",    // time.cloudflare.com IPv6
+	"2606:4700:f1::123",  // time.cloudflare.com IPv6
+	"216.239.35.0",       // time.google.com IPv4
+	"216.239.35.4",       // time.google.com IPv4
+	"216.239.35.8",       // time.google.com IPv4
+	"216.239.35.12",      // time.google.com IPv4
+	"2001:4860:4806::",   // time.google.com IPv6
+	"2001:4860:4806:4::", // time.google.com IPv6
+	"2001:4860:4806:8::", // time.google.com IPv6
+	"2001:4860:4806:c::", // time.google.com IPv6
+}
+
+var DefaultNTPServerHostnames = []string{
+	// should use something from https://github.com/jauderho/public-ntp-servers
 	"time.apple.com",
 	"time.aws.com",
 	"time.windows.com",
 	"time.google.com",
-	"162.159.200.123",   // time.cloudflare.com IPv4
-	"2606:4700:f1::123", // time.cloudflare.com IPv6
-	"0.pool.ntp.org",
-	"1.pool.ntp.org",
-	"2.pool.ntp.org",
-	"3.pool.ntp.org",
+	"time.cloudflare.com",
+	"pool.ntp.org",
+}
+
+func (t *TimeSync) filterNTPServers(ntpServers []string) ([]string, error) {
+	if len(ntpServers) == 0 {
+		return nil, nil
+	}
+
+	hasIPv4, err := t.preCheckIPv4()
+	if err != nil {
+		t.l.Error().Err(err).Msg("failed to check IPv4")
+		return nil, err
+	}
+
+	hasIPv6, err := t.preCheckIPv6()
+	if err != nil {
+		t.l.Error().Err(err).Msg("failed to check IPv6")
+		return nil, err
+	}
+
+	filteredServers := []string{}
+	for _, server := range ntpServers {
+		ip := net.ParseIP(server)
+		t.l.Trace().Str("server", server).Interface("ip", ip).Msg("checking NTP server")
+		if ip == nil {
+			continue
+		}
+
+		if hasIPv4 && ip.To4() != nil {
+			filteredServers = append(filteredServers, server)
+		}
+		if hasIPv6 && ip.To16() != nil {
+			filteredServers = append(filteredServers, server)
+		}
+	}
+	return filteredServers, nil
 }
 
 func (t *TimeSync) queryNetworkTime(ntpServers []string) (now *time.Time, offset *time.Duration) {
+	ntpServers, err := t.filterNTPServers(ntpServers)
+	if err != nil {
+		t.l.Error().Err(err).Msg("failed to filter NTP servers")
+		return nil, nil
+	}
+
 	chunkSize := int(t.networkConfig.TimeSyncParallel.ValueOr(4))
 	t.l.Info().Strs("servers", ntpServers).Int("chunkSize", chunkSize).Msg("querying NTP servers")
 

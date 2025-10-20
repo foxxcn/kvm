@@ -19,6 +19,11 @@ interface JsonRpcResponse {
   id: number | string | null;
 }
 
+export type PostRebootAction = {
+  healthCheck: string;
+  redirectUrl: string;
+} | null;
+
 // Utility function to append stats to a Map
 const appendStatToMap = <T extends { timestamp: number }>(
   stat: T,
@@ -69,11 +74,16 @@ export interface UIState {
 
   terminalType: AvailableTerminalTypes;
   setTerminalType: (type: UIState["terminalType"]) => void;
+
+  rebootState: { isRebooting: boolean; postRebootAction: PostRebootAction } | null;
+  setRebootState: (
+    state: { isRebooting: boolean; postRebootAction: PostRebootAction } | null,
+  ) => void;
 }
 
 export const useUiStore = create<UIState>(set => ({
   terminalType: "none",
-  setTerminalType: (type: UIState["terminalType"])  => set({ terminalType: type }),
+  setTerminalType: (type: UIState["terminalType"]) => set({ terminalType: type }),
 
   sidebarView: null,
   setSidebarView:  (view: AvailableSidebarViews | null) => set({ sidebarView: view }),
@@ -82,7 +92,8 @@ export const useUiStore = create<UIState>(set => ({
   setDisableVideoFocusTrap: (enabled: boolean) => set({ disableVideoFocusTrap: enabled }),
 
   isWakeOnLanModalVisible: false,
-  setWakeOnLanModalVisibility: (enabled: boolean) => set({ isWakeOnLanModalVisible: enabled }),
+  setWakeOnLanModalVisibility: (enabled: boolean) =>
+    set({ isWakeOnLanModalVisible: enabled }),
 
   toggleSidebarView: view =>
     set(state => {
@@ -96,6 +107,9 @@ export const useUiStore = create<UIState>(set => ({
   isAttachedVirtualKeyboardVisible: true,
   setAttachedVirtualKeyboardVisibility: (enabled: boolean) =>
     set({ isAttachedVirtualKeyboardVisible: enabled }),
+
+  rebootState: null,
+  setRebootState: state => set({ rebootState: state }),
 }));
 
 export interface RTCState {
@@ -104,6 +118,21 @@ export interface RTCState {
 
   setRpcDataChannel: (channel: RTCDataChannel) => void;
   rpcDataChannel: RTCDataChannel | null;
+
+  hidRpcDisabled: boolean;
+  setHidRpcDisabled: (disabled: boolean) => void;
+
+  rpcHidProtocolVersion: number | null;
+  setRpcHidProtocolVersion: (version: number | null) => void;
+
+  rpcHidChannel: RTCDataChannel | null;
+  setRpcHidChannel: (channel: RTCDataChannel) => void;
+
+  rpcHidUnreliableChannel: RTCDataChannel | null;
+  setRpcHidUnreliableChannel: (channel: RTCDataChannel) => void;
+
+  rpcHidUnreliableNonOrderedChannel: RTCDataChannel | null;
+  setRpcHidUnreliableNonOrderedChannel: (channel: RTCDataChannel) => void;
 
   peerConnectionState: RTCPeerConnectionState | null;
   setPeerConnectionState: (state: RTCPeerConnectionState) => void;
@@ -150,6 +179,21 @@ export const useRTCStore = create<RTCState>(set => ({
 
   rpcDataChannel: null,
   setRpcDataChannel: (channel: RTCDataChannel) => set({ rpcDataChannel: channel }),
+
+  hidRpcDisabled: false,
+  setHidRpcDisabled: (disabled: boolean) => set({ hidRpcDisabled: disabled }),
+
+  rpcHidProtocolVersion: null,
+  setRpcHidProtocolVersion: (version: number | null) => set({ rpcHidProtocolVersion: version }),
+
+  rpcHidChannel: null,
+  setRpcHidChannel: (channel: RTCDataChannel) => set({ rpcHidChannel: channel }),
+
+  rpcHidUnreliableChannel: null,
+  setRpcHidUnreliableChannel: (channel: RTCDataChannel) => set({ rpcHidUnreliableChannel: channel }),
+
+  rpcHidUnreliableNonOrderedChannel: null,
+  setRpcHidUnreliableNonOrderedChannel: (channel: RTCDataChannel) => set({ rpcHidUnreliableNonOrderedChannel: channel }),
 
   transceiver: null,
   setTransceiver: (transceiver: RTCRtpTransceiver) => set({ transceiver }),
@@ -435,7 +479,7 @@ export interface KeysDownState {
 	keys: number[];
 }
 
-export type USBStates = 
+export type USBStates =
   | "configured"
   | "attached"
   | "not attached"
@@ -449,13 +493,10 @@ export interface HidState {
   keysDownState: KeysDownState;
   setKeysDownState: (state: KeysDownState) => void;
 
-  keyPressReportApiAvailable: boolean;
-  setkeyPressReportApiAvailable: (available: boolean) => void;
-
   isVirtualKeyboardEnabled: boolean;
   setVirtualKeyboardEnabled: (enabled: boolean) => void;
 
-  isPasteModeEnabled: boolean;
+  isPasteInProgress: boolean;
   setPasteModeEnabled: (enabled: boolean) => void;
 
   usbState: USBStates;
@@ -463,20 +504,17 @@ export interface HidState {
 }
 
 export const useHidStore = create<HidState>(set => ({
-  keyboardLedState: {} as KeyboardLedState,
+  keyboardLedState: { num_lock: false, caps_lock: false, scroll_lock: false, compose: false, kana: false, shift: false } as KeyboardLedState,
   setKeyboardLedState: (ledState: KeyboardLedState): void => set({ keyboardLedState: ledState }),
 
   keysDownState: { modifier: 0, keys: [0,0,0,0,0,0] } as KeysDownState,
   setKeysDownState: (state: KeysDownState): void => set({ keysDownState: state }),
 
-  keyPressReportApiAvailable: true,
-  setkeyPressReportApiAvailable: (available: boolean) => set({ keyPressReportApiAvailable: available }),
-
   isVirtualKeyboardEnabled: false,
   setVirtualKeyboardEnabled: (enabled: boolean): void => set({ isVirtualKeyboardEnabled: enabled }),
 
-  isPasteModeEnabled: false,
-  setPasteModeEnabled: (enabled: boolean): void => set({ isPasteModeEnabled: enabled }),
+  isPasteInProgress: false,
+  setPasteModeEnabled: (enabled: boolean): void => set({ isPasteInProgress: enabled }),
 
   // Add these new properties for USB state
   usbState: "not attached",
@@ -648,6 +686,7 @@ export interface DhcpLease {
   timezone?: string;
   routers?: string[];
   dns?: string[];
+  dns_servers?: string[];
   ntp_servers?: string[];
   lpr_servers?: string[];
   _time_servers?: string[];
@@ -665,6 +704,7 @@ export interface DhcpLease {
   message?: string;
   tftp?: string;
   bootfile?: string;
+  dhcp_client?: string;
 }
 
 export interface IPv6Address {
@@ -673,6 +713,15 @@ export interface IPv6Address {
   valid_lifetime: string;
   preferred_lifetime: string;
   scope: string;
+  flags: number;
+  flag_secondary?: boolean;
+  flag_permanent?: boolean;
+  flag_temporary?: boolean;
+  flag_stable_privacy?: boolean;
+  flag_deprecated?: boolean;
+  flag_optimistic?: boolean;
+  flag_dad_failed?: boolean;
+  flag_tentative?: boolean;
 }
 
 export interface NetworkState {
@@ -683,7 +732,9 @@ export interface NetworkState {
   ipv6?: string;
   ipv6_addresses?: IPv6Address[];
   ipv6_link_local?: string;
+  ipv6_gateway?: string;
   dhcp_lease?: DhcpLease;
+  hostname?: string;
 
   setNetworkState: (state: NetworkState) => void;
   setDhcpLease: (lease: NetworkState["dhcp_lease"]) => void;
@@ -708,12 +759,28 @@ export type TimeSyncMode =
   | "custom"
   | "unknown";
 
+export interface IPv4StaticConfig {
+  address: string;
+  netmask: string;
+  gateway: string;
+  dns: string[];
+}
+
+export interface IPv6StaticConfig {
+  prefix: string;
+  gateway: string;
+  dns: string[];
+}
+
 export interface NetworkSettings {
-  hostname: string;
-  domain: string;
-  http_proxy: string;
+  dhcp_client: string;
+  hostname: string | null;
+  domain: string | null;
+  http_proxy: string | null;
   ipv4_mode: IPv4Mode;
+  ipv4_static?: IPv4StaticConfig;
   ipv6_mode: IPv6Mode;
+  ipv6_static?: IPv6StaticConfig;
   lldp_mode: LLDPMode;
   lldp_tx_tlvs: string[];
   mdns_mode: mDNSMode;

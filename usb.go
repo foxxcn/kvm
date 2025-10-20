@@ -1,6 +1,7 @@
 package kvm
 
 import (
+	"sync"
 	"time"
 
 	"github.com/jetkvm/kvm/internal/usbgadget"
@@ -27,13 +28,19 @@ func initUsbGadget() {
 
 	gadget.SetOnKeyboardStateChange(func(state usbgadget.KeyboardState) {
 		if currentSession != nil {
-			writeJSONRPCEvent("keyboardLedState", state, currentSession)
+			currentSession.reportHidRPCKeyboardLedState(state)
 		}
 	})
 
 	gadget.SetOnKeysDownChange(func(state usbgadget.KeysDownState) {
 		if currentSession != nil {
-			writeJSONRPCEvent("keysDownState", state, currentSession)
+			currentSession.enqueueKeysDownState(state)
+		}
+	})
+
+	gadget.SetOnKeepAliveReset(func() {
+		if currentSession != nil {
+			currentSession.resetKeepAliveTime()
 		}
 	})
 
@@ -43,11 +50,11 @@ func initUsbGadget() {
 	}
 }
 
-func rpcKeyboardReport(modifier byte, keys []byte) (usbgadget.KeysDownState, error) {
+func rpcKeyboardReport(modifier byte, keys []byte) error {
 	return gadget.KeyboardReport(modifier, keys)
 }
 
-func rpcKeypressReport(key byte, press bool) (usbgadget.KeysDownState, error) {
+func rpcKeypressReport(key byte, press bool) error {
 	return gadget.KeypressReport(key, press)
 }
 
@@ -71,7 +78,10 @@ func rpcGetKeysDownState() (state usbgadget.KeysDownState) {
 	return gadget.GetKeysDownState()
 }
 
-var usbState = "unknown"
+var (
+	usbState     = "unknown"
+	usbStateLock sync.Mutex
+)
 
 func rpcGetUSBState() (state string) {
 	return gadget.GetUsbState()
@@ -88,13 +98,20 @@ func triggerUSBStateUpdate() {
 }
 
 func checkUSBState() {
+	usbStateLock.Lock()
+	defer usbStateLock.Unlock()
+
 	newState := gadget.GetUsbState()
+
+	usbLogger.Trace().Str("old", usbState).Str("new", newState).Msg("Checking USB state")
+
 	if newState == usbState {
 		return
 	}
-	usbLogger.Info().Str("from", usbState).Str("to", newState).Msg("USB state changed")
-	usbState = newState
 
-	requestDisplayUpdate(true)
+	usbState = newState
+	usbLogger.Info().Str("from", usbState).Str("to", newState).Msg("USB state changed")
+
+	requestDisplayUpdate(true, "usb_state_changed")
 	triggerUSBStateUpdate()
 }
