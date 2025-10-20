@@ -7,11 +7,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jetkvm/kvm/internal/logging"
 	pion_mdns "github.com/pion/mdns/v2"
 	"github.com/rs/zerolog"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
+
+	"github.com/jetkvm/kvm/internal/logging"
 )
 
 type MDNS struct {

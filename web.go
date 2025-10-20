@@ -27,15 +27,16 @@ import (
 	gin_logger "github.com/gin-contrib/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/jetkvm/kvm/internal/logging"
 	"github.com/pion/webrtc/v4"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
-	"github.com/swaggo/files"
-	"github.com/swaggo/gin-swagger"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 	"github.com/vearutop/statigz"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/jetkvm/kvm/internal/logging"
 )
 
 //nolint:typecheck

@@ -9,11 +9,12 @@ import (
 
 	"github.com/jetkvm/kvm/internal/sync"
 
+	"github.com/rs/zerolog"
+
 	"github.com/jetkvm/kvm/internal/logging"
 	"github.com/jetkvm/kvm/internal/network/types"
 	"github.com/jetkvm/kvm/pkg/nmlite/jetdhcpc"
 	"github.com/jetkvm/kvm/pkg/nmlite/link"
-	"github.com/rs/zerolog"
 )
 
 // NetworkManager manages multiple network interfaces

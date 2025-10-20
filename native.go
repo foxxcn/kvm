@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/jetkvm/kvm/internal/native"
 	"github.com/pion/webrtc/v4/pkg/media"
+
+	"github.com/jetkvm/kvm/internal/native"
 )
 
 var (

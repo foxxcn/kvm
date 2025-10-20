@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/vishvananda/netlink"
+
 	"github.com/jetkvm/kvm/internal/network/types"
 	"github.com/jetkvm/kvm/pkg/nmlite/link"
-	"github.com/vishvananda/netlink"
 )
 
 // updateInterfaceState updates the current interface state

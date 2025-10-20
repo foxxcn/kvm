@@ -7,8 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jetkvm/kvm/internal/network/types"
 	"github.com/rs/zerolog"
+
+	"github.com/jetkvm/kvm/internal/network/types"
 )
 
 const (

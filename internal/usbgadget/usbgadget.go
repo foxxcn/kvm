@@ -9,8 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jetkvm/kvm/internal/logging"
 	"github.com/rs/zerolog"
+
+	"github.com/jetkvm/kvm/internal/logging"
 )
 
 // Devices is a struct that represents the USB devices that can be enabled on a USB gadget.

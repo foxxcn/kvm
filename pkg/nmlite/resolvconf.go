@@ -7,10 +7,11 @@ import (
 	"os"
 	"strings"
 
+	"github.com/rs/zerolog"
+
 	"github.com/jetkvm/kvm/internal/network/types"
 	"github.com/jetkvm/kvm/internal/sync"
 	"github.com/jetkvm/kvm/pkg/nmlite/link"
-	"github.com/rs/zerolog"
 )
 
 const (

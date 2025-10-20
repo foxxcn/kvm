@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/erikdubbelboer/gspt"
+
 	"github.com/jetkvm/kvm"
 )
 

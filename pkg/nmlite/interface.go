@@ -10,13 +10,14 @@ import (
 
 	"github.com/jetkvm/kvm/internal/sync"
 
+	"github.com/mdlayher/ndp"
+	"github.com/rs/zerolog"
+	"github.com/vishvananda/netlink"
+
 	"github.com/jetkvm/kvm/internal/confparser"
 	"github.com/jetkvm/kvm/internal/logging"
 	"github.com/jetkvm/kvm/internal/network/types"
 	"github.com/jetkvm/kvm/pkg/nmlite/link"
-	"github.com/mdlayher/ndp"
-	"github.com/rs/zerolog"
-	"github.com/vishvananda/netlink"
 )
 
 type ResolvConfChangeCallback func(family int, resolvConf *types.InterfaceResolvConf) error

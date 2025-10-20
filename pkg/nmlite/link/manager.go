@@ -8,9 +8,10 @@ import (
 
 	"github.com/jetkvm/kvm/internal/sync"
 
-	"github.com/jetkvm/kvm/internal/network/types"
 	"github.com/rs/zerolog"
 	"github.com/vishvananda/netlink"
+
+	"github.com/jetkvm/kvm/internal/network/types"
 )
 
 // StateChangeHandler is the function type for link state callbacks

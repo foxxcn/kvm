@@ -1,8 +1,9 @@
 package native
 
 import (
-	"github.com/jetkvm/kvm/internal/logging"
 	"github.com/rs/zerolog"
+
+	"github.com/jetkvm/kvm/internal/logging"
 )
 
 var nativeLogger = logging.GetSubsystemLogger("native")

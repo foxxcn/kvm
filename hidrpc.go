@@ -6,9 +6,10 @@ import (
 	"io"
 	"time"
 
+	"github.com/rs/zerolog"
+
 	"github.com/jetkvm/kvm/internal/hidrpc"
 	"github.com/jetkvm/kvm/internal/usbgadget"
-	"github.com/rs/zerolog"
 )
 
 func handleHidRPCMessage(message hidrpc.Message, session *Session) {
