@@ -45,6 +45,7 @@ export default function InfoBar() {
 
   const usbState = useHidStore(state => state.usbState);
   const hdmiState = useVideoStore(state => state.hdmiState);
+  const audioEnabled = useSettingsStore(state => state.audioEnabled);
 
   return (
     <div className="bg-white border-t border-t-slate-800/30 text-slate-800 dark:border-t-slate-300/20 dark:bg-slate-900 dark:text-slate-300">
@@ -95,6 +96,12 @@ export default function InfoBar() {
               <div className="flex w-[156px] items-center gap-x-1">
                 <span className="text-xs font-semibold">HDMI State:</span>
                 <span className="text-xs">{hdmiState}</span>
+              </div>
+            )}
+            {settings.debugMode && settings.audioEnabled && (
+              <div className="flex w-[156px] items-center gap-x-1">
+                <span className="text-xs font-semibold">Audio State:</span>
+                <span className="text-xs">on</span>
               </div>
             )}
 

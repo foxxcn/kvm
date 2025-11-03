@@ -38,6 +38,7 @@ function createChartArray<T, K extends keyof T>(
 
 export default function ConnectionStatsSidebar() {
   const inboundRtpStats = useRTCStore(state => state.inboundRtpStats);
+  const audioVolume = useRTCStore(state => state.audioVolume);
 
   const candidatePairStats = useRTCStore(state => state.candidatePairStats);
   const setSidebarView = useUiStore(state => state.setSidebarView);
@@ -232,6 +233,38 @@ export default function ConnectionStatsSidebar() {
                         )}
                         domain={[0, 80]}
                         unit=" fps"
+                      />
+                    )}
+                  </div>
+                </GridCard>
+              </div>
+              <div className="space-y-2">
+                <div>
+                  <h2 className="text-lg font-semibold text-black dark:text-white">
+                    Audio volume
+                  </h2>
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
+                    Real-time audio playback volume.
+                  </p>
+                </div>
+                <GridCard>
+                  <div className="flex h-[127px] w-full items-center justify-center text-sm text-slate-500">
+                    {inboundRtpStats.size === 0 ? (
+                      <div className="flex flex-col items-center space-y-1">
+                        <p className="text-slate-700">Waiting for data...</p>
+                      </div>
+                    ) : (
+                      <StatChart
+                        data={createChartArray(inboundRtpStats, "timestamp").map(
+                          x => {
+                            return {
+                              date: x.date,
+                              stat: audioVolume,
+                            };
+                          },
+                        )}
+                        domain={[0, 1]}
+                        unit=""
                       />
                     )}
                   </div>

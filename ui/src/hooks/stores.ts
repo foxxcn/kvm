@@ -145,6 +145,10 @@ interface RTCState {
 
   terminalChannel: RTCDataChannel | null;
   setTerminalChannel: (channel: RTCDataChannel) => void;
+  
+  // Audio volume state
+  audioVolume: number;
+  setAudioVolume: (volume: number) => void;
 }
 
 export const useRTCStore = create<RTCState>(set => ({
@@ -213,7 +217,11 @@ export const useRTCStore = create<RTCState>(set => ({
   // Add these new properties to the store implementation
   terminalChannel: null,
   setTerminalChannel: channel => set({ terminalChannel: channel }),
-}));
+  
+  // Audio volume state
+  audioVolume: 0,
+  setAudioVolume: volume => set({ audioVolume: volume }),
+});
 
 interface MouseMove {
   x: number;
@@ -324,6 +332,10 @@ interface SettingsState {
   setVideoBrightness: (value: number) => void;
   videoContrast: number;
   setVideoContrast: (value: number) => void;
+
+  // Audio settings
+  audioEnabled: boolean;
+  setAudioEnabled: (enabled: boolean) => void;
 }
 
 export const useSettingsStore = create(
@@ -372,6 +384,10 @@ export const useSettingsStore = create(
       setVideoBrightness: value => set({ videoBrightness: value }),
       videoContrast: 1.0,
       setVideoContrast: value => set({ videoContrast: value }),
+
+      // Audio settings - default to enabled
+      audioEnabled: true,
+      setAudioEnabled: enabled => set({ audioEnabled: enabled }),
     }),
     {
       name: "settings",

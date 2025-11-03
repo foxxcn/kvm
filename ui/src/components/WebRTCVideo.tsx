@@ -32,8 +32,15 @@ export default function WebRTCVideo() {
   const [isPlaying, setIsPlaying] = useState(false);
   const peerConnectionState = useRTCStore(state => state.peerConnectionState);
   const [isPointerLockActive, setIsPointerLockActive] = useState(false);
+  // Audio related states
+  const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
+  const audioDataArrayRef = useRef<Uint8Array | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
   // Store hooks
   const settings = useSettingsStore();
+  const audioEnabled = useSettingsStore(state => state.audioEnabled);
+  const setAudioVolume = useRTCStore(state => state.setAudioVolume);
   const { sendKeyboardEvent, resetKeyboardState } = useKeyboard();
   const setMousePosition = useMouseStore(state => state.setMousePosition);
   const setMouseMove = useMouseStore(state => state.setMouseMove);
@@ -507,14 +514,78 @@ export default function WebRTCVideo() {
     }
   }, []);
 
+  // Audio volume visualization setup
+  const setupAudioVisualization = useCallback((mediaStream: MediaStream) => {
+    // Check if audio is enabled and there's an audio track
+    if (!audioEnabled) return;
+    
+    const audioTracks = mediaStream.getAudioTracks();
+    if (audioTracks.length === 0) return;
+    
+    // Create audio context and analyser
+    const ctx = new AudioContext();
+    const analyserNode = ctx.createAnalyser();
+    analyserNode.fftSize = 256;
+    
+    // Create media stream source
+    const source = ctx.createMediaStreamSource(mediaStream);
+    source.connect(analyserNode);
+    
+    // Set up data array for volume analysis
+    const bufferLength = analyserNode.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    
+    // Store references
+    setAudioContext(ctx);
+    setAnalyser(analyserNode);
+    audioDataArrayRef.current = dataArray;
+    
+    // Start animation loop for volume visualization
+    const animate = () => {
+      animationFrameRef.current = requestAnimationFrame(animate);
+      
+      // Get audio data
+      analyserNode.getByteFrequencyData(dataArray);
+      
+      // Calculate average volume
+      const sum = Array.from(dataArray).reduce((acc, val) => acc + val, 0);
+      const average = sum / bufferLength;
+      
+      // Normalize to 0-1 range
+      setAudioVolume(average / 255);
+    };
+    
+    animate();
+  }, [audioEnabled]);
+
+  // Cleanup audio visualization
+  const cleanupAudioVisualization = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    
+    if (audioContext) {
+      audioContext.close();
+      setAudioContext(null);
+    }
+    
+    setAnalyser(null);
+    setAudioVolume(0);
+    audioDataArrayRef.current = null;
+  }, [audioContext]);
+
   const addStreamToVideoElm = useCallback(
     (mediaStream: MediaStream) => {
       if (!videoElm.current) return;
       const videoElmRefValue = videoElm.current;
       videoElmRefValue.srcObject = mediaStream;
       updateVideoSizeStore(videoElmRefValue);
+      
+      // Set up audio visualization
+      setupAudioVisualization(mediaStream);
     },
-    [updateVideoSizeStore],
+    [updateVideoSizeStore, setupAudioVisualization],
   );
 
   useEffect(
@@ -533,9 +604,10 @@ export default function WebRTCVideo() {
 
       return () => {
         abortController.abort();
+        cleanupAudioVisualization();
       };
     },
-    [addStreamToVideoElm, peerConnection],
+    [addStreamToVideoElm, peerConnection, cleanupAudioVisualization],
   );
 
   useEffect(
@@ -552,6 +624,28 @@ export default function WebRTCVideo() {
       addStreamToVideoElm,
     ],
   );
+
+  // Update video element's muted state when audioEnabled changes
+  useEffect(() => {
+    if (!videoElm.current) return;
+    
+    videoElm.current.muted = !audioEnabled;
+    
+    // If audio is enabled but we haven't set up visualization yet, try to set it up
+    if (audioEnabled && mediaStream && !audioContext) {
+      setupAudioVisualization(mediaStream);
+    } else if (!audioEnabled) {
+      // If audio is disabled, cleanup visualization
+      cleanupAudioVisualization();
+    }
+  }, [audioEnabled, mediaStream, audioContext, setupAudioVisualization, cleanupAudioVisualization]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cleanupAudioVisualization();
+    };
+  }, [cleanupAudioVisualization]);
 
   // Setup Keyboard Events
   useEffect(
@@ -705,7 +799,7 @@ export default function WebRTCVideo() {
                           controls={false}
                           onPlaying={onVideoPlaying}
                           onPlay={onVideoPlaying}
-                          muted
+                          muted={!audioEnabled}
                           playsInline
                           disablePictureInPicture
                           controlsList="nofullscreen"

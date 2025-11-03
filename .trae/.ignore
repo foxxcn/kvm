@@ -1,0 +1,7 @@
+*.go
+bin/
+cmd/
+internal/
+resource/
+.github/
+.devcontainer/

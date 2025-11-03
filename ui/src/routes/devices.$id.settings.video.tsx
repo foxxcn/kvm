@@ -54,6 +54,10 @@ export default function SettingsVideoRoute() {
   const videoContrast = useSettingsStore(state => state.videoContrast);
   const setVideoContrast = useSettingsStore(state => state.setVideoContrast);
 
+  // Audio settings from store
+  const audioEnabled = useSettingsStore(state => state.audioEnabled);
+  const setAudioEnabled = useSettingsStore(state => state.setAudioEnabled);
+
   useEffect(() => {
     send("getStreamQualityFactor", {}, resp => {
       if ("error" in resp) return;
@@ -255,6 +259,19 @@ export default function SettingsVideoRoute() {
                 </div>
               </>
             )}
+
+            {/* Audio Settings */}
+            <SettingsItem
+              title="Audio"
+              description="Enable or disable audio playback from the remote device"
+            >
+              <input
+                type="checkbox"
+                checked={audioEnabled}
+                onChange={e => setAudioEnabled(e.target.checked)}
+                className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300 dark:bg-gray-700 dark:border-gray-600"
+              />
+            </SettingsItem>
           </div>
         </div>
       </div>
