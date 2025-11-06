@@ -66,7 +66,7 @@ export default function DevicesRoute() {
                 <EmptyCard
                   IconElm={LuMonitorSmartphone}
                   headline="No devices found"
-                  description="You don't have any devices with enabled JetKVM Cloud yet."
+                  description="You don't have any devices with enabled RustKVM Cloud yet."
                   BtnElm={
                     <LinkButton
                       to="https://jetkvm.com/docs/networking/remote-access"

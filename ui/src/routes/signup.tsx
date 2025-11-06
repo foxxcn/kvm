@@ -11,7 +11,7 @@ export default function SignupRoute() {
     return (
       <AuthLayout
         showCounter={true}
-        title="Connect your JetKVM to the cloud"
+        title="Connect your RustKVM to the cloud"
         description="Unlock remote access and advanced features for your device."
         action="Signup & Connect device"
         cta="Already have an account?"
@@ -22,7 +22,7 @@ export default function SignupRoute() {
 
   return (
     <AuthLayout
-      title="Create your JetKVM account"
+      title="Create your RustKVM account"
       description="Create your account and start managing your devices with ease."
       action="Create Account"
       // Header CTA

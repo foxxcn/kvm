@@ -50,7 +50,7 @@ function ConfirmationBox({
     <div className="flex flex-col items-start justify-start space-y-4 text-left">
       <div className="text-left">
         <p className="text-base font-semibold text-black dark:text-white">
-          Reboot JetKVM
+          Reboot RustKVM
         </p>
         <p className="text-sm text-slate-600 dark:text-slate-300">
           Do you want to proceed with rebooting the system?

@@ -88,7 +88,7 @@ export default function WelcomeLocalPasswordRoute() {
                   Set a Password
                 </h1>
                 <p className="font-medium text-slate-600 dark:text-slate-400">
-                  Create a strong password to secure your JetKVM device locally.
+                  Create a strong password to secure your RustKVM device locally.
                 </p>
               </div>
 

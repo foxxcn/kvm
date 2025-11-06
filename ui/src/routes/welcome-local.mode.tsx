@@ -77,7 +77,7 @@ export default function WelcomeLocalModeRoute() {
                   Local Authentication Method
                 </h1>
                 <p className="font-medium text-slate-600 dark:text-slate-400">
-                  Select how you{"'"}d like to secure your JetKVM device locally.
+                  Select how you{"'"}d like to secure your RustKVM device locally.
                 </p>
               </div>
 

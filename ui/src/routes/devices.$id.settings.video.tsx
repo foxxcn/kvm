@@ -15,7 +15,7 @@ const defaultEdid =
 const edids = [
   {
     value: defaultEdid,
-    label: "JetKVM Default",
+    label: "RustKVM Default",
   },
   {
     value:

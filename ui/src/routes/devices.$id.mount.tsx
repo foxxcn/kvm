@@ -178,12 +178,12 @@ export function Dialog({ onClose }: { onClose: () => void }) {
             <div className="flex flex-col items-start justify-start space-y-4 text-left">
               <img
                 src={LogoBlueIcon}
-                alt="JetKVM Logo"
+                alt="RustKVM Logo"
                 className="block h-[24px] dark:hidden"
               />
               <img
                 src={LogoWhiteIcon}
-                alt="JetKVM Logo"
+                alt="RustKVM Logo"
                 className="hidden h-[24px] dark:mt-0! dark:block"
               />
               {modalView === "mode" && (
@@ -309,9 +309,9 @@ function ModeSelectionView({
             disabled: false,
           },
           {
-            label: "JetKVM Storage Mount",
+            label: "RustKVM Storage Mount",
             value: "device",
-            description: "Mount previously uploaded files from the JetKVM storage",
+            description: "Mount previously uploaded files from the RustKVM storage",
             icon: LuRadioReceiver,
             tag: null,
             disabled: false,
@@ -792,8 +792,8 @@ function DeviceFileView({
   return (
     <div className="w-full space-y-4">
       <ViewHeader
-        title="Mount from JetKVM Storage"
-        description="Select an image to mount from the JetKVM storage"
+        title="Mount from RustKVM Storage"
+        description="Select an image to mount from the RustKVM storage"
       />
       <div
         className="w-full animate-fadeIn opacity-0"
@@ -1246,7 +1246,7 @@ function UploadFileView({
         description={
           incompleteFileName
             ? `Continue uploading "${incompleteFileName}"`
-            : "Select an image file to upload to JetKVM storage"
+            : "Select an image file to upload to RustKVM storage"
         }
       />
       <div

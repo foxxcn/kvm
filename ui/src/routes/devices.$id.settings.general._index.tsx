@@ -96,7 +96,7 @@ export default function SettingsGeneralRoute() {
           <div className="mt-2 flex items-center justify-between gap-x-2">
             <SettingsItem
               title="Reboot Device"
-              description="Power cycle the JetKVM"
+              description="Power cycle the RustKVM"
             />
             <div>
               <Button

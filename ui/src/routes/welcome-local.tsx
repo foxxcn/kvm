@@ -48,19 +48,19 @@ export default function WelcomeRoute() {
                     <div className="animate-fadeIn animation-delay-1000 flex items-center justify-center opacity-0">
                       <img
                         src={LogoWhiteIcon}
-                        alt="JetKVM Logo"
+                        alt="RustKVM Logo"
                         className="hidden h-[32px] dark:block"
                       />
                       <img
                         src={LogoBlueIcon}
-                        alt="JetKVM Logo"
+                        alt="RustKVM Logo"
                         className="h-[32px] dark:hidden"
                       />
                     </div>
 
                     <div className="animate-fadeIn animation-delay-1500 space-y-1 opacity-0">
                       <h1 className="text-4xl font-semibold text-black dark:text-white">
-                        Welcome to JetKVM
+                        Welcome to RustKVM
                       </h1>
                       <p className="text-lg font-medium text-slate-600 dark:text-slate-400">
                         Control any computer remotely
@@ -71,7 +71,7 @@ export default function WelcomeRoute() {
                   <div className="-mt-2! -ml-6 flex items-center justify-center">
                     <img
                       src={DeviceImage}
-                      alt="JetKVM Device"
+                      alt="RustKVM Device"
                       className="animation-delay-300 animate-fadeInScaleFloat max-w-md scale-[0.98] opacity-0 transition-all duration-1000 ease-out"
                     />
                   </div>
@@ -81,14 +81,14 @@ export default function WelcomeRoute() {
                     style={{ animationDelay: "2000ms" }}
                     className="animate-fadeIn mx-auto max-w-lg text-lg text-slate-700 opacity-0 dark:text-slate-300"
                   >
-                    JetKVM combines powerful hardware with intuitive software to provide a
+                    RustKVM combines powerful hardware with intuitive software to provide a
                     seamless remote control experience.
                   </p>
                   <div className="animate-fadeIn animation-delay-2300 opacity-0">
                     <LinkButton
                       size="LG"
                       theme="light"
-                      text="Set up your JetKVM"
+                      text="Set up your RustKVM"
                       LeadingIcon={({ className }) => (
                         <img src={LogoMark} className={cx(className, "mr-1.5 h-5!")} />
                       )}

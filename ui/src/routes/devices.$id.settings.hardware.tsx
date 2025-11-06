@@ -75,7 +75,7 @@ export default function SettingsHardwareRoute() {
     <div className="space-y-4">
       <SettingsPageHeader
         title="Hardware"
-        description="Configure display settings and hardware options for your JetKVM device"
+        description="Configure display settings and hardware options for your RustKVM device"
       />
       <div className="space-y-4">
         <SettingsItem

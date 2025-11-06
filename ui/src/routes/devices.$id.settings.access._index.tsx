@@ -65,10 +65,10 @@ export default function SettingsAccessIndexRoute() {
       if (cloudState.appUrl) setCloudAppUrl(cloudState.appUrl);
 
       // Find if the API URL matches any of our predefined providers
-      const isAPIJetKVMProd = cloudState.url === "https://api.jetkvm.com";
-      const isAppJetKVMProd = cloudState.appUrl === "https://app.jetkvm.com";
+      const isAPIRustKVMProd = cloudState.url === "https://api.jetkvm.com";
+      const isAppRustKVMProd = cloudState.appUrl === "https://app.jetkvm.com";
 
-      if (isAPIJetKVMProd && isAppJetKVMProd) {
+      if (isAPIRustKVMProd && isAppRustKVMProd) {
         setSelectedProvider("jetkvm");
       } else {
         setSelectedProvider("custom");
@@ -346,7 +346,7 @@ export default function SettingsAccessIndexRoute() {
                   value={selectedProvider}
                   onChange={e => handleProviderChange(e.target.value)}
                   options={[
-                    { value: "jetkvm", label: "JetKVM Cloud" },
+                    { value: "jetkvm", label: "RustKVM Cloud" },
                     { value: "custom", label: "Custom" },
                   ]}
                 />
@@ -377,7 +377,7 @@ export default function SettingsAccessIndexRoute() {
             </>
           )}
 
-          {/* Show security info for JetKVM Cloud */}
+          {/* Show security info for RustKVM Cloud */}
           {selectedProvider === "jetkvm" && (
             <GridCard>
               <div className="flex items-start gap-x-4 p-4">
