@@ -48,6 +48,9 @@ export default function SettingsVideoRoute() {
 
   // Video enhancement settings from store
   const videoSaturation = useSettingsStore(state => state.videoSaturation);
+  // Network monitoring setting from store
+  const networkMonitoringEnabled = useSettingsStore(state => state.networkMonitoringEnabled);
+  const setNetworkMonitoringEnabled = useSettingsStore(state => state.setNetworkMonitoringEnabled);
   const setVideoSaturation = useSettingsStore(state => state.setVideoSaturation);
   const videoBrightness = useSettingsStore(state => state.videoBrightness);
   const setVideoBrightness = useSettingsStore(state => state.setVideoBrightness);
@@ -255,6 +258,20 @@ export default function SettingsVideoRoute() {
                 </div>
               </>
             )}
+
+            <SettingsItem
+              title="Network Monitoring"
+              description="Enable real-time network bandwidth monitoring"
+            >
+              <div className="flex justify-end">
+                <input
+                  type="checkbox"
+                  checked={networkMonitoringEnabled}
+                  onChange={e => setNetworkMonitoringEnabled(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+              </div>
+            </SettingsItem>
           </div>
         </div>
       </div>

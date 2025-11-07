@@ -237,6 +237,44 @@ export default function ConnectionStatsSidebar() {
                   </div>
                 </GridCard>
               </div>
+              <div className="space-y-2">
+                <div>
+                  <h2 className="text-lg font-semibold text-black dark:text-white">
+                    Bandwidth Usage
+                  </h2>
+                  <p className="text-sm text-slate-700 dark:text-slate-300">
+                    Real-time network bandwidth usage.
+                  </p>
+                </div>
+                <GridCard>
+                  <div className="flex h-[127px] w-full items-center justify-center text-sm text-slate-500">
+                    {inboundRtpStats.size === 0 ? (
+                      <div className="flex flex-col items-center space-y-1">
+                        <p className="text-slate-700">Waiting for data...</p>
+                      </div>
+                    ) : isMetricSupported(inboundRtpStats, "bytesReceived") ? (
+                      <StatChart
+                        data={createChartArray(inboundRtpStats, "bytesReceived").map(
+                          (x, index, array) => {
+                            if (index === 0) return { date: x.date, stat: null };
+                            const prev = array[index - 1];
+                            if (!prev.stat || !x.stat) return { date: x.date, stat: null };
+                            const bytesPerSecond = x.stat - prev.stat;
+                            const mbps = (bytesPerSecond * 8) / (1024 * 1024);
+                            return { date: x.date, stat: mbps };
+                          },
+                        )}
+                        domain={[0, 100]}
+                        unit=" Mbps"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center space-y-1">
+                        <p className="text-black">Metric not supported</p>
+                      </div>
+                    )}
+                  </div>
+                </GridCard>
+              </div>
             </div>
           )}
         </div>

@@ -317,6 +317,10 @@ interface SettingsState {
   showPressedKeys: boolean;
   setShowPressedKeys: (show: boolean) => void;
 
+  // Network monitoring
+  networkMonitoringEnabled: boolean;
+  setNetworkMonitoringEnabled: (enabled: boolean) => void;
+
   // Video enhancement settings
   videoSaturation: number;
   setVideoSaturation: (value: number) => void;
@@ -364,6 +368,10 @@ export const useSettingsStore = create(
 
       showPressedKeys: true,
       setShowPressedKeys: show => set({ showPressedKeys: show }),
+
+      // Network monitoring with default value
+      networkMonitoringEnabled: true,
+      setNetworkMonitoringEnabled: enabled => set({ networkMonitoringEnabled: enabled }),
 
       // Video enhancement settings with default values (1.0 = normal)
       videoSaturation: 1.0,
