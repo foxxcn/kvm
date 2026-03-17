@@ -1207,4 +1207,5 @@ var rpcHandlers = map[string]RPCHandler{
 	"setLocalLoopbackOnly":       {Func: rpcSetLocalLoopbackOnly, Params: []string{"enabled"}},
 	"getPublicIPAddresses":       {Func: rpcGetPublicIPAddresses, Params: []string{"refresh"}},
 	"checkPublicIPAddresses":     {Func: rpcCheckPublicIPAddresses},
+	"getTailscaleStatus":         {Func: rpcGetTailscaleStatus},
 }
