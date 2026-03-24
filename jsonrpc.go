@@ -1214,6 +1214,8 @@ var rpcHandlers = map[string]RPCHandler{
 	"getPublicIPAddresses":       {Func: rpcGetPublicIPAddresses, Params: []string{"refresh"}},
 	"checkPublicIPAddresses":     {Func: rpcCheckPublicIPAddresses},
 	"getTailscaleStatus":         {Func: rpcGetTailscaleStatus},
+	"getTailscaleControlURL":     {Func: rpcGetTailscaleControlURL},
+	"setTailscaleControlURL":     {Func: rpcSetTailscaleControlURL, Params: []string{"controlURL"}},
 	"getMqttSettings":            {Func: rpcGetMqttSettings},
 	"setMqttSettings":            {Func: rpcSetMqttSettings, Params: []string{"settings"}},
 	"getMqttStatus":              {Func: rpcGetMqttStatus},

@@ -144,6 +144,7 @@ tail -f /userdata/jetkvm/last.log
 
 - `web.go` - Add new API endpoints here
 - `config.go` - Add new settings here
+- `tailscale.go` - Tailscale status and control-server logic
 - `ui/src/routes/` - Add new pages here
 - `ui/src/components/` - Add new UI components here
 
@@ -249,6 +250,21 @@ curl -X POST http://<IP>/auth/password-local \
   -H "Content-Type: application/json" \
   -d '{"password": "test123"}'
 ```
+
+### Tailscale control server testing
+
+JetKVM exposes Tailscale control-server configuration through JSON-RPC so self-hosted control planes (for example Headscale) can be used.
+
+- `getTailscaleStatus` returns current state and effective `controlURL`
+- `getTailscaleControlURL` returns the effective control server URL
+- `setTailscaleControlURL` updates and persists the URL (empty value resets to default)
+
+Notes:
+
+- URLs must be `http://` or `https://` and include a host.
+- Query strings, fragments, user info, and non-root paths are rejected.
+- Control server changes are applied with `tailscale set --login-server=...`.
+- When apply fails, the previous configured URL is restored and not persisted.
 
 
 ### End to End Testing
