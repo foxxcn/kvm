@@ -649,14 +649,53 @@ func rpcSetWakeOnLanDevices(params SetWakeOnLanDevicesParams) error {
 	return SaveConfig()
 }
 
-func rpcResetConfig() error {
+// resetConfig resets the config file to defaults. Used internally by OTA updates and native events.
+func resetConfig() error {
 	defaultConfig := getDefaultConfig()
 	config = &defaultConfig
 	if err := SaveConfig(); err != nil {
 		return fmt.Errorf("failed to reset config: %w", err)
 	}
-
 	logger.Info().Msg("Configuration reset to default")
+	return nil
+}
+
+// factoryResetPaths lists all user data paths that should be removed during a factory reset.
+var factoryResetPaths = []string{
+	configPath,
+	imagesFolder,
+	tlsStorePath,
+	sshKeyDir,
+	serialSettingsPath,
+	SerialCommandHistoryPath,
+	failsafeDefaultLastCrashPath,
+}
+
+func rpcFactoryReset() error {
+	logger.Info().Msg("Factory reset initiated, removing all user data")
+
+	var errs []error
+	for _, path := range factoryResetPaths {
+		if err := os.RemoveAll(path); err != nil {
+			logger.Warn().Err(err).Str("path", path).Msg("failed to remove path during factory reset")
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		logger.Warn().Int("errors", len(errs)).Msg("factory reset completed with errors, rebooting anyway")
+	} else {
+		logger.Info().Msg("Factory reset complete, rebooting device")
+	}
+
+	// Reboot asynchronously to allow the RPC response to be sent first.
+	go func() {
+		time.Sleep(1 * time.Second)
+		if err := hwReboot(true, nil, 0); err != nil {
+			logger.Error().Err(err).Msg("failed to reboot after factory reset")
+		}
+	}()
+
 	return nil
 }
 
@@ -1182,7 +1221,7 @@ var rpcHandlers = map[string]RPCHandler{
 	"startStorageFileUpload":     {Func: rpcStartStorageFileUpload, Params: []string{"filename", "size"}},
 	"getWakeOnLanDevices":        {Func: rpcGetWakeOnLanDevices},
 	"setWakeOnLanDevices":        {Func: rpcSetWakeOnLanDevices, Params: []string{"params"}},
-	"resetConfig":                {Func: rpcResetConfig},
+	"factoryReset":               {Func: rpcFactoryReset},
 	"setDisplayRotation":         {Func: rpcSetDisplayRotation, Params: []string{"params"}},
 	"getDisplayRotation":         {Func: rpcGetDisplayRotation},
 	"setBacklightSettings":       {Func: rpcSetBacklightSettings, Params: []string{"params"}},
