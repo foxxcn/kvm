@@ -1,14 +1,18 @@
 import { useCallback, useState } from "react";
 
+import { Checkbox } from "@components/Checkbox";
 import { SelectMenuBasic } from "@components/SelectMenuBasic";
 import { SettingsItem } from "@components/SettingsItem";
 import { SettingsPageHeader } from "@components/SettingsPageheader";
+import { useSettingsStore } from "@hooks/stores";
 import { m } from "@localizations/messages.js";
 
 export default function SettingsAppearanceRoute() {
   const [currentTheme, setCurrentTheme] = useState(() => {
     return localStorage.theme || "system";
   });
+
+  const settings = useSettingsStore();
 
   const handleThemeChange = useCallback((value: string) => {
     const root = document.documentElement;
@@ -50,6 +54,24 @@ export default function SettingsAppearanceRoute() {
             setCurrentTheme(e.target.value);
             handleThemeChange(e.target.value);
           }}
+        />
+      </SettingsItem>
+      <SettingsItem
+        title={m.appearance_hide_header_bar()}
+        description={m.appearance_hide_header_bar_description()}
+      >
+        <Checkbox
+          checked={settings.hideHeaderBar}
+          onChange={e => settings.setHideHeaderBar(e.target.checked)}
+        />
+      </SettingsItem>
+      <SettingsItem
+        title={m.appearance_hide_status_bar()}
+        description={m.appearance_hide_status_bar_description()}
+      >
+        <Checkbox
+          checked={settings.hideStatusBar}
+          onChange={e => settings.setHideStatusBar(e.target.checked)}
         />
       </SettingsItem>
     </div>
