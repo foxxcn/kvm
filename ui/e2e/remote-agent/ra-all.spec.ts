@@ -1102,6 +1102,149 @@ test.describe("Remote Host Agent", () => {
   });
 
   // ═══════════════════════════════════════════
+  // USB SERIAL CONSOLE (CDC-ACM)
+  // ═══════════════════════════════════════════
+
+  test("usb: serial console CDC-ACM toggle creates and removes ttyACM on host", async () => {
+    test.setTimeout(30_000);
+
+    const remoteHost = process.env.JETKVM_REMOTE_HOST;
+    test.skip(!remoteHost, "JETKVM_REMOTE_HOST not set");
+
+    const sshTarget = remoteHost!.includes("@") ? remoteHost! : `tony@${remoteHost}`;
+    const sshOpts = "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=10";
+    const { execSync } = await import("child_process");
+
+    const remoteExec = (cmd: string) =>
+      execSync(`ssh ${sshOpts} ${sshTarget} "${cmd}"`, { encoding: "utf8" }).trim();
+
+    // Ensure serial console is off initially
+    await callJsonRpc(sharedPage, "setUsbDevices", {
+      devices: { ...USB_DEVICES_DEFAULT, serial_console: false },
+    });
+    await new Promise(r => setTimeout(r, 3000));
+
+    // Verify the host does NOT see a ttyACM device
+    const beforeACM = remoteExec("ls /dev/ttyACM* 2>/dev/null || echo MISSING");
+    expect(beforeACM).toBe("MISSING");
+
+    // Enable serial console
+    await callJsonRpc(sharedPage, "setUsbDevices", {
+      devices: { ...USB_DEVICES_DEFAULT, serial_console: true },
+    });
+    await new Promise(r => setTimeout(r, 3000));
+
+    // Verify the host now sees a ttyACM device
+    const afterACM = remoteExec("ls /dev/ttyACM* 2>/dev/null || echo MISSING");
+    expect(afterACM).not.toBe("MISSING");
+
+    // Verify /dev/ttyGS0 exists on the KVM device
+    const afterGS0 = (await sshExec("ls /dev/ttyGS0 2>/dev/null || echo MISSING", true)).trim();
+    expect(afterGS0).toBe("/dev/ttyGS0");
+
+    // Disable serial console
+    await callJsonRpc(sharedPage, "setUsbDevices", {
+      devices: { ...USB_DEVICES_DEFAULT, serial_console: false },
+    });
+    await new Promise(r => setTimeout(r, 3000));
+
+    // Verify the host no longer sees a ttyACM device
+    const removedACM = remoteExec("ls /dev/ttyACM* 2>/dev/null || echo MISSING");
+    expect(removedACM).toBe("MISSING");
+
+    // Verify other USB functions still work (keyboard, mouse)
+    await agent!.waitForInputDevices(
+      ["keyboard", "absolute_mouse", "relative_mouse"],
+      10000,
+    );
+  });
+
+  // ═══════════════════════════════════════════
+  // USB SERIAL CONSOLE UI
+  // ═══════════════════════════════════════════
+
+  test("usb: USB Serial Console terminal sends and receives data via ttyGS0", async () => {
+    test.setTimeout(60_000);
+
+    const remoteHost = process.env.JETKVM_REMOTE_HOST;
+    test.skip(!remoteHost, "JETKVM_REMOTE_HOST not set");
+
+    const sshTarget = remoteHost!.includes("@") ? remoteHost! : `tony@${remoteHost}`;
+    const sshOpts = "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=10";
+    const { execSync } = await import("child_process");
+
+    // Use single-quoted SSH commands to avoid nested quoting issues
+    const remoteExec = (cmd: string) =>
+      execSync(`ssh ${sshOpts} ${sshTarget} '${cmd}'`, { encoding: "utf8", timeout: 15_000 }).trim();
+
+    // Enable serial console
+    await callJsonRpc(sharedPage, "setUsbDevices", {
+      devices: { ...USB_DEVICES_DEFAULT, serial_console: true },
+    });
+    await new Promise(r => setTimeout(r, 3000));
+
+    // Find the ttyACM device on the remote host
+    const ttyACM = remoteExec("ls /dev/ttyACM* 2>/dev/null | head -1");
+    expect(ttyACM).toContain("ttyACM");
+
+    // Reload the page so the action bar picks up serial_console enabled state
+    await sharedPage.reload({ waitUntil: "networkidle" });
+    await waitForWebRTCReady(sharedPage);
+
+    // Verify the USB Serial Console button is visible
+    const cdcButton = sharedPage.getByRole("button", { name: "USB Serial Console" });
+    await expect(cdcButton).toBeVisible({ timeout: 5000 });
+
+    // Click the button to open the terminal
+    await cdcButton.click();
+    await new Promise(r => setTimeout(r, 1000));
+
+    // Configure the remote serial port and start a background reader
+    const testString = `e2e_test_${Date.now()}`;
+    remoteExec(`sudo stty -F ${ttyACM} 9600 raw -echo`);
+    remoteExec(`sudo bash -c "nohup cat ${ttyACM} > /tmp/cdcacm_rx.txt 2>/dev/null &"`);
+    await new Promise(r => setTimeout(r, 500));
+
+    // Type a string into the USB Serial Console terminal
+    // The terminal is focused after opening, so we type directly
+    await sharedPage.keyboard.type(testString, { delay: 50 });
+    await new Promise(r => setTimeout(r, 2000));
+
+    // Read what the remote host received
+    const received = remoteExec("sudo cat /tmp/cdcacm_rx.txt 2>/dev/null || echo EMPTY");
+    expect(received).toContain(testString);
+
+    // Test receiving data: send from remote host to ttyACM
+    const replyString = `reply_${Date.now()}`;
+    remoteExec(`sudo bash -c "echo ${replyString} > ${ttyACM}"`);
+    await new Promise(r => setTimeout(r, 2000));
+
+    // Take a screenshot for visual review
+    await sharedPage.screenshot({ path: `${process.cwd()}/screenshot.png` });
+
+    // Clean up: kill background cat, remove temp file
+    remoteExec("sudo pkill -f cat.*/dev/ttyACM || true");
+    remoteExec("sudo rm -f /tmp/cdcacm_rx.txt");
+
+    // Close the terminal
+    await sharedPage.keyboard.press("Escape");
+    await new Promise(r => setTimeout(r, 500));
+
+    // Disable serial console to clean up
+    await callJsonRpc(sharedPage, "setUsbDevices", {
+      devices: { ...USB_DEVICES_DEFAULT, serial_console: false },
+    });
+    await new Promise(r => setTimeout(r, 2000));
+
+    // Verify button is gone after disabling
+    await sharedPage.reload({ waitUntil: "networkidle" });
+    await waitForWebRTCReady(sharedPage);
+    await expect(
+      sharedPage.getByRole("button", { name: "USB Serial Console" }),
+    ).not.toBeVisible({ timeout: 5000 });
+  });
+
+  // ═══════════════════════════════════════════
   // USB RECOVERY
   // ═══════════════════════════════════════════
 

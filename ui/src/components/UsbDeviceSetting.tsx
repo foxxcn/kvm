@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { JsonRpcResponse, useJsonRpc } from "@hooks/useJsonRpc";
+import { useUiStore } from "@hooks/stores";
 import { m } from "@localizations/messages.js";
 import { SettingsItem } from "@components/SettingsItem";
 import Checkbox from "@components/Checkbox";
@@ -24,6 +25,7 @@ export interface UsbDeviceConfig {
   absolute_mouse: boolean;
   relative_mouse: boolean;
   mass_storage: boolean;
+  serial_console: boolean;
 }
 
 const defaultUsbDeviceConfig: UsbDeviceConfig = {
@@ -31,6 +33,7 @@ const defaultUsbDeviceConfig: UsbDeviceConfig = {
   absolute_mouse: true,
   relative_mouse: true,
   mass_storage: true,
+  serial_console: false,
 };
 
 const usbPresets = [
@@ -42,6 +45,7 @@ const usbPresets = [
       absolute_mouse: true,
       relative_mouse: true,
       mass_storage: true,
+      serial_console: false,
     },
   },
   {
@@ -52,6 +56,7 @@ const usbPresets = [
       absolute_mouse: false,
       relative_mouse: false,
       mass_storage: false,
+      serial_console: false,
     },
   },
   {
@@ -63,6 +68,7 @@ const usbPresets = [
 export function UsbDeviceSetting() {
   const { send } = useJsonRpc();
   const [loading, setLoading] = useState(false);
+  const { setUsbSerialConsoleEnabled } = useUiStore();
 
   const [usbDeviceConfig, setUsbDeviceConfig] = useState<UsbDeviceConfig>(defaultUsbDeviceConfig);
   const [selectedPreset, setSelectedPreset] = useState<string>("default");
@@ -77,6 +83,7 @@ export function UsbDeviceSetting() {
       } else {
         const usbConfigState = resp.result as UsbDeviceConfig;
         setUsbDeviceConfig(usbConfigState);
+        setUsbSerialConsoleEnabled(usbConfigState.serial_console);
 
         // Set the appropriate preset based on current config
         const matchingPreset = usbPresets.find(
@@ -93,7 +100,7 @@ export function UsbDeviceSetting() {
         setSelectedPreset(matchingPreset ? matchingPreset.value : "custom");
       }
     });
-  }, [send]);
+  }, [send, setUsbSerialConsoleEnabled]);
 
   const handleUsbConfigChange = useCallback(
     (devices: UsbDeviceConfig) => {
@@ -216,6 +223,17 @@ export function UsbDeviceSetting() {
                 <Checkbox
                   checked={usbDeviceConfig.mass_storage}
                   onChange={onUsbConfigItemChange("mass_storage")}
+                />
+              </SettingsItem>
+            </div>
+            <div className="space-y-4">
+              <SettingsItem
+                title={m.usb_device_enable_serial_console_title()}
+                description={m.usb_device_enable_serial_console_description()}
+              >
+                <Checkbox
+                  checked={usbDeviceConfig.serial_console}
+                  onChange={onUsbConfigItemChange("serial_console")}
                 />
               </SettingsItem>
             </div>
