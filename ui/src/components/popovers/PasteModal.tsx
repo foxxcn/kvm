@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useClose } from "@headlessui/react";
 import { ExclamationCircleIcon } from "@heroicons/react/16/solid";
-import { LuCornerDownLeft } from "react-icons/lu";
+import { LuCornerDownLeft, LuEye, LuEyeOff } from "react-icons/lu";
 
 import { cx } from "@/cva.config";
 import { m } from "@localizations/messages.js";
@@ -23,6 +23,8 @@ const defaultDelay = 20;
 export default function PasteModal() {
   const TextAreaRef = useRef<HTMLTextAreaElement>(null);
   const { isPasteInProgress } = useHidStore();
+  const [textValue, setTextValue] = useState("");
+  const [hideText, setHideText] = useState(false);
   const { setDisableVideoFocusTrap } = useUiStore();
 
   const { send } = useJsonRpc();
@@ -45,22 +47,36 @@ export default function PasteModal() {
   const { selectedKeyboard } = useKeyboardLayout();
 
   useEffect(() => {
-    send("getKeyboardLayout", {}, (resp: JsonRpcResponse) => {
+    void send("getKeyboardLayout", {}, (resp: JsonRpcResponse) => {
       if ("error" in resp) return;
       setKeyboardLayout(resp.result as string);
     });
   }, [send, setKeyboardLayout]);
 
   const onCancelPasteMode = useCallback(() => {
-    cancelExecuteMacro();
+    void cancelExecuteMacro();
     setDisableVideoFocusTrap(false);
     setInvalidChars([]);
   }, [setDisableVideoFocusTrap, cancelExecuteMacro]);
 
-  const onConfirmPaste = useCallback(async () => {
-    if (!TextAreaRef.current || !selectedKeyboard) return;
+  const updateInvalidChars = useCallback(
+    (value: string) => {
+      const chars = [
+        ...new Set(
+          [...(new Intl.Segmenter().segment(value) ?? [])]
+            .map(x => x.segment.normalize("NFC"))
+            .filter(char => !selectedKeyboard?.chars[char]),
+        ),
+      ];
+      setInvalidChars(chars);
+    },
+    [selectedKeyboard],
+  );
 
-    const text = TextAreaRef.current.value;
+  const onConfirmPaste = useCallback(async () => {
+    if (!selectedKeyboard) return;
+
+    const text = textValue;
 
     try {
       const macroSteps: MacroStep[] = [];
@@ -109,13 +125,11 @@ export default function PasteModal() {
       console.error("Failed to paste text:", error);
       notifications.error(m.paste_modal_failed_paste({ error: String(error) }));
     }
-  }, [selectedKeyboard, executeMacro, delay]);
+  }, [selectedKeyboard, executeMacro, delay, textValue]);
 
   useEffect(() => {
-    if (TextAreaRef.current) {
-      TextAreaRef.current.focus();
-    }
-  }, []);
+    TextAreaRef.current?.focus();
+  }, [hideText]);
 
   return (
     <GridCard>
@@ -140,42 +154,63 @@ export default function PasteModal() {
                     onKeyDownCapture={e => e.stopPropagation()}
                     onKeyUpCapture={e => e.stopPropagation()}
                   >
-                    <TextAreaWithLabel
-                      ref={TextAreaRef}
-                      label={m.paste_modal_paste_from_host()}
-                      rows={4}
-                      onKeyUp={e => e.stopPropagation()}
-                      maxLength={pasteMaxLength}
-                      onKeyDown={e => {
-                        e.stopPropagation();
-                        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                          e.preventDefault();
-                          onConfirmPaste();
-                        } else if (e.key === "Escape") {
-                          e.preventDefault();
-                          onCancelPasteMode();
+                    <div className="space-y-1">
+                      <TextAreaWithLabel
+                        ref={TextAreaRef}
+                        label={
+                          <div className="flex items-center justify-between">
+                            <div className="font-display text-[13px] leading-snug font-semibold text-black dark:text-white">
+                              {m.paste_modal_paste_from_host()}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setHideText(!hideText)}
+                              className="flex items-center gap-1 text-xs font-normal text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                            >
+                              {hideText ? (
+                                <>
+                                  <LuEyeOff className="h-3.5 w-3.5" />
+                                  {m.paste_modal_show_text()}
+                                </>
+                              ) : (
+                                <>
+                                  <LuEye className="h-3.5 w-3.5" />
+                                  {m.paste_modal_hide_text()}
+                                </>
+                              )}
+                            </button>
+                          </div>
                         }
-                      }}
-                      onChange={e => {
-                        const value = e.target.value;
-                        const invalidChars = [
-                          ...new Set(
-                            // @ts-expect-error TS doesn't recognize Intl.Segmenter in some environments
-                            [...new Intl.Segmenter().segment(value)]
-                              .map(x => x.segment.normalize("NFC"))
-                              .filter(char => !selectedKeyboard.chars[char]),
-                          ),
-                        ];
-
-                        setInvalidChars(invalidChars);
-                      }}
-                    />
+                        rows={4}
+                        value={textValue}
+                        style={hideText ? { WebkitTextSecurity: "disc" } : undefined}
+                        onKeyUp={e => e.stopPropagation()}
+                        maxLength={pasteMaxLength}
+                        onKeyDown={e => {
+                          e.stopPropagation();
+                          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                            e.preventDefault();
+                            void onConfirmPaste();
+                          } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            onCancelPasteMode();
+                          }
+                        }}
+                        onChange={e => {
+                          const value = e.target.value;
+                          setTextValue(value);
+                          updateInvalidChars(value);
+                        }}
+                      />
+                    </div>
 
                     {invalidChars.length > 0 && (
                       <div className="mt-2 flex items-center gap-x-2">
                         <ExclamationCircleIcon className="h-4 w-4 text-red-500 dark:text-red-400" />
                         <span className="text-xs text-red-500 dark:text-red-400">
-                          {m.paste_modal_invalid_chars_intro()} {invalidChars.join(", ")}
+                          {hideText
+                            ? m.paste_modal_invalid_chars_hidden()
+                            : `${m.paste_modal_invalid_chars_intro()} ${invalidChars.join(", ")}`}
                         </span>
                       </div>
                     )}
