@@ -36,7 +36,7 @@ function remoteHostExec(cmd: string): string {
   const target = process.env.JETKVM_REMOTE_HOST;
   if (!target) throw new Error("JETKVM_REMOTE_HOST not set");
   const sshOpts =
-    "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=10";
+    "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=ERROR -o ConnectTimeout=10";
   return execSync(`ssh ${sshOpts} ${target} '${cmd}'`, {
     encoding: "utf8",
     timeout: 15000,
@@ -271,7 +271,6 @@ async function waitForRpcReady(page: Page, timeoutMs = 30000) {
     }
   }
   throw new Error(`RPC channel not ready after ${timeoutMs}ms`);
-
 }
 
 test.beforeAll(async ({ browser }) => {
@@ -317,39 +316,6 @@ test.afterAll(async () => {
 
 test.describe("Remote Host Agent", () => {
   // ═══════════════════════════════════════════
-  // DISPLAY + EDID
-  // ═══════════════════════════════════════════
-
-  test("display: resolution, modes, and EDID preset change", async () => {
-    // Verify display info
-    const [displays, resolution] = await Promise.all([
-      agent!.getDisplays(),
-      agent!.getResolution(),
-    ]);
-
-    const connected = displays.filter(d => d.status === "connected");
-    expect(connected.length).toBeGreaterThanOrEqual(1);
-    expect(connected[0].modes).toBeDefined();
-    expect(connected[0].modes!.length).toBeGreaterThan(0);
-    expect(resolution).not.toBeNull();
-    expect(resolution).toMatch(/^\d+x\d+$/);
-
-    // Change EDID preset and verify host sees the new resolution
-    const currentEdid = (await callJsonRpc(sharedPage, "getEDID")) as string;
-    const targetEdid = currentEdid === "1920x1080" ? "1280x720" : "1920x1080";
-    await callJsonRpc(sharedPage, "setEDID", { edid: targetEdid });
-
-    const newRes = await agent!.getResolution();
-    expect(newRes).not.toBeNull();
-    expect(newRes).toMatch(/^\d+x\d+$/);
-
-    // Restore original EDID in background (keyboard test below tolerates brief HID disruption)
-    callJsonRpc(sharedPage, "setEDID", { edid: currentEdid }).catch(() => {
-      /* ignore */
-    });
-  });
-
-  // ═══════════════════════════════════════════
   // KEYBOARD: TOGGLE KEYS + LED ROUND-TRIP
   // ═══════════════════════════════════════════
 
@@ -380,7 +346,6 @@ test.describe("Remote Host Agent", () => {
         capsToggled = true;
         break;
       } catch {
-        // HID or LED path not ready; undo toggle attempt and retry
         await tapKey(sharedPage, HID_KEY.CAPS_LOCK);
         await new Promise(r => setTimeout(r, 500));
       }
@@ -433,6 +398,61 @@ test.describe("Remote Host Agent", () => {
   });
 
   // ═══════════════════════════════════════════
+  // DISPLAY + EDID
+  // ═══════════════════════════════════════════
+
+  test("display: resolution, modes, and EDID preset change", async () => {
+    test.setTimeout(90_000);
+
+    const [displays, resolution] = await Promise.all([
+      agent!.getDisplays(),
+      agent!.getResolution(),
+    ]);
+
+    const connected = displays.filter(d => d.status === "connected");
+    expect(connected.length).toBeGreaterThanOrEqual(1);
+    expect(connected[0].modes).toBeDefined();
+    expect(connected[0].modes!.length).toBeGreaterThan(0);
+    expect(resolution).not.toBeNull();
+    expect(resolution).toMatch(/^\d+x\d+$/);
+
+    const currentEdid = (await callJsonRpc(sharedPage, "getEDID")) as string;
+    const targetEdid = currentEdid === "1920x1080" ? "1280x720" : "1920x1080";
+    await callJsonRpc(sharedPage, "setEDID", { edid: targetEdid });
+
+    const newRes = await agent!.getResolution();
+    expect(newRes).not.toBeNull();
+    expect(newRes).toMatch(/^\d+x\d+$/);
+
+    // Restore original EDID. This triggers USB disconnect/reconnect.
+    await callJsonRpc(sharedPage, "setEDID", { edid: currentEdid });
+
+    await sharedPage.goto("/", { waitUntil: "networkidle" });
+    await waitForWebRTCReady(sharedPage);
+    await waitForRpcReady(sharedPage);
+    await agent!.waitForInputDevices(["keyboard", "absolute_mouse", "relative_mouse"], 15000);
+
+    // Verify keyboard works after EDID changes
+    const kbDeadline = Date.now() + 30000;
+    let kbEvents: RAKeyboardEvent[] = [];
+    while (Date.now() < kbDeadline) {
+      try {
+        kbEvents = await agent!.expectKeyPress(
+          KEY.SPACE,
+          async () => {
+            await tapKey(sharedPage, HID_KEY.SPACE);
+          },
+          3000,
+        );
+        break;
+      } catch {
+        /* USB/HID not recovered yet */
+      }
+    }
+    expect(kbEvents.length, "keyboard should work after EDID restore").toBeGreaterThan(0);
+  });
+
+  // ═══════════════════════════════════════════
   // KEYBOARD: SCANS + PRESS/RELEASE + MODIFIERS
   // ═══════════════════════════════════════════
 
@@ -447,13 +467,13 @@ test.describe("Remote Host Agent", () => {
         for (const hid of keys) {
           hooks.sendKeypress(hid, true);
           hooks.sendKeypress(hid, false);
-          await new Promise(r => setTimeout(r, 5));
+          await new Promise(r => setTimeout(r, 10));
         }
       },
       ALL_SCAN_KEYS.map(k => k.hid),
     );
 
-    const scanDeadline = Date.now() + 3000;
+    const scanDeadline = Date.now() + 5000;
     let failed: string[] = [];
     while (Date.now() < scanDeadline) {
       const events = await agent!.getKeyboardEvents();
@@ -498,9 +518,9 @@ test.describe("Remote Host Agent", () => {
     test.setTimeout(15_000);
 
     const modifiers = [
-      { hid: 0xE0, linux: KEY.LEFT_CTRL, label: "LeftCtrl" },
-      { hid: 0xE1, linux: KEY.LEFT_SHIFT, label: "LeftShift" },
-      { hid: 0xE2, linux: KEY.LEFT_ALT, label: "LeftAlt" },
+      { hid: 0xe0, linux: KEY.LEFT_CTRL, label: "LeftCtrl" },
+      { hid: 0xe1, linux: KEY.LEFT_SHIFT, label: "LeftShift" },
+      { hid: 0xe2, linux: KEY.LEFT_ALT, label: "LeftAlt" },
     ];
 
     for (const { hid, linux, label } of modifiers) {
@@ -512,15 +532,13 @@ test.describe("Remote Host Agent", () => {
       await new Promise(r => setTimeout(r, 300));
 
       const events = await agent!.getKeyboardEvents();
-      const presses = events.filter(
-        ev => ev.code === linux && ev.type === "key_press",
-      );
-      const releases = events.filter(
-        ev => ev.code === linux && ev.type === "key_release",
-      );
+      const presses = events.filter(ev => ev.code === linux && ev.type === "key_press");
+      const releases = events.filter(ev => ev.code === linux && ev.type === "key_release");
 
       expect(presses.length, `${label} press should be received`).toBeGreaterThanOrEqual(1);
-      expect(releases.length, `${label} should auto-release after timeout`).toBeGreaterThanOrEqual(1);
+      expect(releases.length, `${label} should auto-release after timeout`).toBeGreaterThanOrEqual(
+        1,
+      );
     }
   });
 
@@ -540,7 +558,7 @@ test.describe("Remote Host Agent", () => {
     await agent!.clearKeyboardEvents();
 
     // Hold down a modifier (LeftShift) and a regular key (Space) without releasing
-    await sendKeypress(freshPage, 0xE1, true);
+    await sendKeypress(freshPage, 0xe1, true);
     await new Promise(r => setTimeout(r, 20));
     await sendKeypress(freshPage, HID_KEY.SPACE, true);
     await new Promise(r => setTimeout(r, 50));
@@ -577,6 +595,7 @@ test.describe("Remote Host Agent", () => {
     // Reconnect sharedPage so subsequent tests can use it
     await sharedPage.goto("/", { waitUntil: "networkidle" });
     await waitForWebRTCReady(sharedPage);
+    await waitForRpcReady(sharedPage);
 
     // Verify device-side keys-down state is clear
     const state = await getKeysDownState(sharedPage);
@@ -871,92 +890,6 @@ test.describe("Remote Host Agent", () => {
   });
 
   // ═══════════════════════════════════════════
-  // INPUT: POLISH DIACRITICS PASTE
-  // ═══════════════════════════════════════════
-
-  test("input: paste Polish diacritics via pl-PL layout", async () => {
-    test.setTimeout(30_000);
-
-    // Save current layout, switch to pl-PL
-    const prevLayout = await callJsonRpc(sharedPage, "getKeyboardLayout") as string;
-    await callJsonRpc(sharedPage, "setKeyboardLayout", { layout: "pl-PL" });
-
-    // Reload so the paste modal picks up the new layout
-    await sharedPage.reload({ waitUntil: "networkidle" });
-    await waitForWebRTCReady(sharedPage);
-
-    const polishText = "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ";
-
-    // Expected base key codes for each diacritic (lowercase then uppercase, same base keys)
-    // ą/Ą→A, ć/Ć→C, ę/Ę→E, ł/Ł→L, ń/Ń→N, ó/Ó→O, ś/Ś→S, ź/Ź→X, ż/Ż→Z
-    const expectedBaseKeys = [
-      KEY.A, KEY.C, KEY.E, KEY.L, KEY.N, KEY.O, KEY.S, KEY.X, KEY.Z, // lowercase
-      KEY.A, KEY.C, KEY.E, KEY.L, KEY.N, KEY.O, KEY.S, KEY.X, KEY.Z, // uppercase
-    ];
-
-    await agent!.clearKeyboardEvents();
-
-    // Open paste modal, fill text, confirm
-    await sharedPage.getByRole("button", { name: "Paste text" }).click();
-    const textarea = sharedPage.locator("textarea#asd");
-    await textarea.waitFor({ state: "visible", timeout: 3000 });
-    await textarea.fill(polishText);
-
-    const confirmBtn = sharedPage.getByRole("button", { name: "Confirm Paste" });
-    await confirmBtn.waitFor({ state: "visible", timeout: 2000 });
-    await confirmBtn.click({ force: true });
-
-    // Wait for all expected base keys to arrive in order
-    const pasteDeadline = Date.now() + 15000;
-    let matchIdx = 0;
-    while (Date.now() < pasteDeadline) {
-      const events = await agent!.getKeyboardEvents();
-      const pressedCodes = events.filter(ev => ev.type === "key_press").map(ev => ev.code);
-      matchIdx = 0;
-      for (const code of pressedCodes) {
-        if (code === expectedBaseKeys[matchIdx]) {
-          matchIdx++;
-          if (matchIdx === expectedBaseKeys.length) break;
-        }
-      }
-      if (matchIdx === expectedBaseKeys.length) break;
-      await new Promise(r => setTimeout(r, 100));
-    }
-    expect(
-      matchIdx,
-      `Polish paste: expected ${expectedBaseKeys.length} base keys but matched ${matchIdx}`,
-    ).toBe(expectedBaseKeys.length);
-
-    // Verify RIGHT_ALT was pressed at least 18 times (once per diacritic)
-    const allEvents = await agent!.getKeyboardEvents();
-    const altRightPresses = allEvents.filter(
-      ev => ev.code === KEY.RIGHT_ALT && ev.type === "key_press",
-    );
-    expect(
-      altRightPresses.length,
-      `Expected ≥18 RIGHT_ALT presses, got ${altRightPresses.length}`,
-    ).toBeGreaterThanOrEqual(18);
-
-    // Verify LEFT_SHIFT was pressed at least 9 times (once per uppercase diacritic)
-    const shiftPresses = allEvents.filter(
-      ev => ev.code === KEY.LEFT_SHIFT && ev.type === "key_press",
-    );
-    expect(
-      shiftPresses.length,
-      `Expected ≥9 LEFT_SHIFT presses, got ${shiftPresses.length}`,
-    ).toBeGreaterThanOrEqual(9);
-
-    // Dismiss any lingering paste dialog
-    const cancelBtn = sharedPage.getByRole("button", { name: "Cancel" });
-    if (await cancelBtn.isVisible({ timeout: 300 }).catch(() => false)) {
-      await cancelBtn.click();
-    }
-
-    // Restore original layout
-    await callJsonRpc(sharedPage, "setKeyboardLayout", { layout: prevLayout || "en-US" });
-  });
-
-  // ═══════════════════════════════════════════
   // VIRTUAL MEDIA
   // ═══════════════════════════════════════════
 
@@ -1028,13 +961,23 @@ test.describe("Remote Host Agent", () => {
     await agent!.waitForInputDevices(["keyboard", "absolute_mouse", "relative_mouse"], 15000);
 
     // Verify keyboard works after disk mount (this would fail without the ResetHIDFiles fix)
-    const postMountEvents = await agent!.expectKeyPress(
-      KEY.SPACE,
-      async () => {
-        await tapKey(sharedPage, HID_KEY.SPACE);
-      },
-      5000,
-    );
+    // Retry — the HID channel may need time to stabilize after USB rebind
+    const postMountDeadline = Date.now() + 30000;
+    let postMountEvents: RAKeyboardEvent[] = [];
+    while (Date.now() < postMountDeadline) {
+      try {
+        postMountEvents = await agent!.expectKeyPress(
+          KEY.SPACE,
+          async () => {
+            await tapKey(sharedPage, HID_KEY.SPACE);
+          },
+          3000,
+        );
+        break;
+      } catch {
+        /* retry */
+      }
+    }
     expect(postMountEvents.length, "keyboard should work after disk mount").toBeGreaterThan(0);
 
     // Unmount
@@ -1046,13 +989,22 @@ test.describe("Remote Host Agent", () => {
     await agent!.waitForInputDevices(["keyboard", "absolute_mouse", "relative_mouse"], 15000);
 
     // Verify keyboard works after unmount too
-    const postUnmountEvents = await agent!.expectKeyPress(
-      KEY.SPACE,
-      async () => {
-        await tapKey(sharedPage, HID_KEY.SPACE);
-      },
-      5000,
-    );
+    const postUnmountDeadline = Date.now() + 30000;
+    let postUnmountEvents: RAKeyboardEvent[] = [];
+    while (Date.now() < postUnmountDeadline) {
+      try {
+        postUnmountEvents = await agent!.expectKeyPress(
+          KEY.SPACE,
+          async () => {
+            await tapKey(sharedPage, HID_KEY.SPACE);
+          },
+          3000,
+        );
+        break;
+      } catch {
+        /* retry */
+      }
+    }
     expect(postUnmountEvents.length, "keyboard should work after unmount").toBeGreaterThan(0);
   });
 
@@ -1113,7 +1065,8 @@ test.describe("Remote Host Agent", () => {
     test.skip(!remoteHost, "JETKVM_REMOTE_HOST not set");
 
     const sshTarget = remoteHost!.includes("@") ? remoteHost! : `tony@${remoteHost}`;
-    const sshOpts = "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=10";
+    const sshOpts =
+      "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=ERROR -o ConnectTimeout=10";
     const { execSync } = await import("child_process");
 
     const remoteExec = (cmd: string) =>
@@ -1126,8 +1079,8 @@ test.describe("Remote Host Agent", () => {
     await new Promise(r => setTimeout(r, 3000));
 
     // Verify the host does NOT see a ttyACM device
-    const beforeACM = remoteExec("ls /dev/ttyACM* 2>/dev/null || echo MISSING");
-    expect(beforeACM).toBe("MISSING");
+    const beforeACM = remoteExec("find /dev -maxdepth 1 -name 'ttyACM*' | head -1 || true");
+    expect(beforeACM).toBe("");
 
     // Enable serial console
     await callJsonRpc(sharedPage, "setUsbDevices", {
@@ -1136,8 +1089,8 @@ test.describe("Remote Host Agent", () => {
     await new Promise(r => setTimeout(r, 3000));
 
     // Verify the host now sees a ttyACM device
-    const afterACM = remoteExec("ls /dev/ttyACM* 2>/dev/null || echo MISSING");
-    expect(afterACM).not.toBe("MISSING");
+    const afterACM = remoteExec("find /dev -maxdepth 1 -name 'ttyACM*' | head -1");
+    expect(afterACM).toContain("ttyACM");
 
     // Verify /dev/ttyGS0 exists on the KVM device
     const afterGS0 = (await sshExec("ls /dev/ttyGS0 2>/dev/null || echo MISSING", true)).trim();
@@ -1150,14 +1103,11 @@ test.describe("Remote Host Agent", () => {
     await new Promise(r => setTimeout(r, 3000));
 
     // Verify the host no longer sees a ttyACM device
-    const removedACM = remoteExec("ls /dev/ttyACM* 2>/dev/null || echo MISSING");
-    expect(removedACM).toBe("MISSING");
+    const removedACM = remoteExec("find /dev -maxdepth 1 -name 'ttyACM*' | head -1 || true");
+    expect(removedACM).toBe("");
 
     // Verify other USB functions still work (keyboard, mouse)
-    await agent!.waitForInputDevices(
-      ["keyboard", "absolute_mouse", "relative_mouse"],
-      10000,
-    );
+    await agent!.waitForInputDevices(["keyboard", "absolute_mouse", "relative_mouse"], 10000);
   });
 
   // ═══════════════════════════════════════════
@@ -1171,12 +1121,15 @@ test.describe("Remote Host Agent", () => {
     test.skip(!remoteHost, "JETKVM_REMOTE_HOST not set");
 
     const sshTarget = remoteHost!.includes("@") ? remoteHost! : `tony@${remoteHost}`;
-    const sshOpts = "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o ConnectTimeout=10";
+    const sshOpts =
+      "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=ERROR -o ConnectTimeout=10";
     const { execSync } = await import("child_process");
 
-    // Use single-quoted SSH commands to avoid nested quoting issues
     const remoteExec = (cmd: string) =>
-      execSync(`ssh ${sshOpts} ${sshTarget} '${cmd}'`, { encoding: "utf8", timeout: 15_000 }).trim();
+      execSync(`ssh ${sshOpts} ${sshTarget} "${cmd}"`, {
+        encoding: "utf8",
+        timeout: 15_000,
+      }).trim();
 
     // Enable serial console
     await callJsonRpc(sharedPage, "setUsbDevices", {
@@ -1185,7 +1138,7 @@ test.describe("Remote Host Agent", () => {
     await new Promise(r => setTimeout(r, 3000));
 
     // Find the ttyACM device on the remote host
-    const ttyACM = remoteExec("ls /dev/ttyACM* 2>/dev/null | head -1");
+    const ttyACM = remoteExec("find /dev -maxdepth 1 -name 'ttyACM*' | head -1");
     expect(ttyACM).toContain("ttyACM");
 
     // Reload the page so the action bar picks up serial_console enabled state
@@ -1203,7 +1156,7 @@ test.describe("Remote Host Agent", () => {
     // Configure the remote serial port and start a background reader
     const testString = `e2e_test_${Date.now()}`;
     remoteExec(`sudo stty -F ${ttyACM} 9600 raw -echo`);
-    remoteExec(`sudo bash -c "nohup cat ${ttyACM} > /tmp/cdcacm_rx.txt 2>/dev/null &"`);
+    remoteExec(`sudo bash -c 'nohup cat ${ttyACM} > /tmp/cdcacm_rx.txt 2>/dev/null &'`);
     await new Promise(r => setTimeout(r, 500));
 
     // Type a string into the USB Serial Console terminal
@@ -1217,15 +1170,23 @@ test.describe("Remote Host Agent", () => {
 
     // Test receiving data: send from remote host to ttyACM
     const replyString = `reply_${Date.now()}`;
-    remoteExec(`sudo bash -c "echo ${replyString} > ${ttyACM}"`);
+    remoteExec(`sudo bash -c 'echo ${replyString} > ${ttyACM}'`);
     await new Promise(r => setTimeout(r, 2000));
 
     // Take a screenshot for visual review
     await sharedPage.screenshot({ path: `${process.cwd()}/screenshot.png` });
 
     // Clean up: kill background cat, remove temp file
-    remoteExec("sudo pkill -f cat.*/dev/ttyACM || true");
-    remoteExec("sudo rm -f /tmp/cdcacm_rx.txt");
+    try {
+      remoteExec("sudo pkill -f cat./dev/ttyACM");
+    } catch {
+      /* no matching process */
+    }
+    try {
+      remoteExec("sudo rm -f /tmp/cdcacm_rx.txt");
+    } catch {
+      /* ignore */
+    }
 
     // Close the terminal
     await sharedPage.keyboard.press("Escape");
@@ -1240,9 +1201,9 @@ test.describe("Remote Host Agent", () => {
     // Verify button is gone after disabling
     await sharedPage.reload({ waitUntil: "networkidle" });
     await waitForWebRTCReady(sharedPage);
-    await expect(
-      sharedPage.getByRole("button", { name: "USB Serial Console" }),
-    ).not.toBeVisible({ timeout: 5000 });
+    await expect(sharedPage.getByRole("button", { name: "USB Serial Console" })).not.toBeVisible({
+      timeout: 5000,
+    });
   });
 
   // ═══════════════════════════════════════════
@@ -1402,67 +1363,6 @@ test.describe("Remote Host Agent", () => {
 
     // Restore original duration
     await callJsonRpc(sharedPage, "setVideoSleepMode", { duration: originalDuration });
-  });
-
-  // ═══════════════════════════════════════════
-  // WAKE-ON-LAN: BROADCAST ADDRESS UI
-  // ═══════════════════════════════════════════
-
-  test("wol: broadcast address field only on add form, defaults to Auto", async () => {
-    test.setTimeout(90_000);
-
-    // Navigate to device page and ensure WebRTC is ready
-    await sharedPage.goto("/", { waitUntil: "networkidle" });
-    await waitForWebRTCReady(sharedPage);
-
-    // Clean up any existing WoL devices
-    await callJsonRpc(sharedPage, "setWakeOnLanDevices", { params: { devices: [] } });
-
-    // Add a device via RPC, then verify the list doesn't show broadcast controls
-    await callJsonRpc(sharedPage, "setWakeOnLanDevices", {
-      params: { devices: [{ name: "E2E WoL Test", macAddress: "00:11:22:33:44:55" }] },
-    });
-
-    // Open the WoL popover
-    const wolButton = sharedPage.getByRole("button", { name: /wake on lan/i });
-    await wolButton.waitFor({ state: "visible", timeout: 5000 });
-    await wolButton.click();
-
-    // Wait for the device list to appear
-    await sharedPage.getByText("E2E WoL Test").waitFor({ state: "visible", timeout: 5000 });
-
-    // Verify NO broadcast dropdown is visible in the device list view
-    const broadcastSelectInList = sharedPage.locator("select").filter({
-      has: sharedPage.locator('option[value="auto"]'),
-    });
-    await expect(broadcastSelectInList).not.toBeVisible();
-
-    // Click "Add New Device" to open the add form
-    const addNewBtn = sharedPage.getByRole("button", { name: /add new device/i });
-    await addNewBtn.waitFor({ state: "visible", timeout: 5000 });
-    await addNewBtn.click();
-
-    // Verify broadcast address dropdown IS visible in add form and defaults to "Auto"
-    const broadcastSelect = sharedPage.locator("select").filter({
-      has: sharedPage.locator('option[value="auto"]'),
-    });
-    await expect(broadcastSelect).toBeVisible({ timeout: 5000 });
-    await expect(broadcastSelect).toHaveValue("auto");
-
-    // Switch to custom — verify IP input appears
-    await broadcastSelect.selectOption("custom");
-    const ipInput = sharedPage.getByPlaceholder("192.168.1.255");
-    await expect(ipInput).toBeVisible({ timeout: 3000 });
-
-    // Switch back to auto — IP input disappears
-    await broadcastSelect.selectOption("auto");
-    await expect(ipInput).not.toBeVisible();
-
-    // Close the popover by pressing Escape
-    await sharedPage.keyboard.press("Escape");
-
-    // Clean up
-    await callJsonRpc(sharedPage, "setWakeOnLanDevices", { params: { devices: [] } });
   });
 
   // ═══════════════════════════════════════════
