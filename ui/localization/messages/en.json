@@ -1075,5 +1075,6 @@
   "wake_on_lan_invalid_mac": "Invalid MAC address",
   "wake_on_lan_magic_sent_success": "Magic Packet sent successfully",
   "welcome_to_jetkvm": "Welcome to JetKVM",
-  "welcome_to_jetkvm_description": "Control any computer remotely"
+  "welcome_to_jetkvm_description": "Control any computer remotely",
+  "atx_power_control_hold_hint": "Hold for 3s to force off"
 }

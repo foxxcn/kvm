@@ -1070,5 +1070,6 @@
   "wake_on_lan_invalid_mac": "无效的 MAC 地址",
   "wake_on_lan_magic_sent_success": "魔术包发送成功",
   "welcome_to_jetkvm": "欢迎使用 JetKVM",
-  "welcome_to_jetkvm_description": "远程控制任意计算机"
+  "welcome_to_jetkvm_description": "远程控制任意计算机",
+  "atx_power_control_hold_hint": "按住 3 秒强制关机"
 }

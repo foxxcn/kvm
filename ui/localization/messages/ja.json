@@ -1070,5 +1070,6 @@
   "wake_on_lan_invalid_mac": "無効なMACアドレス",
   "wake_on_lan_magic_sent_success": "マジックパケットが正常に送信されました",
   "welcome_to_jetkvm": "JetKVMへようこそ",
-  "welcome_to_jetkvm_description": "あらゆるコンピュータをリモート制御"
+  "welcome_to_jetkvm_description": "あらゆるコンピュータをリモート制御",
+  "atx_power_control_hold_hint": "3秒長押しで強制オフ"
 }

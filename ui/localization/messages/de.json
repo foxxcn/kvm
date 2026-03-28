@@ -1070,5 +1070,6 @@
   "wake_on_lan_invalid_mac": "Ungültige MAC-Adresse",
   "wake_on_lan_magic_sent_success": "Magic Packet erfolgreich gesendet",
   "welcome_to_jetkvm": "Willkommen bei JetKVM",
-  "welcome_to_jetkvm_description": "Jeden Computer aus der Ferne steuern"
+  "welcome_to_jetkvm_description": "Jeden Computer aus der Ferne steuern",
+  "atx_power_control_hold_hint": "3 Sekunden halten zum Ausschalten erzwingen"
 }

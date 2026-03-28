@@ -1070,5 +1070,6 @@
   "wake_on_lan_invalid_mac": "Endereço MAC inválido",
   "wake_on_lan_magic_sent_success": "Pacote Mágico enviado com sucesso",
   "welcome_to_jetkvm": "Bem-vindo ao JetKVM",
-  "welcome_to_jetkvm_description": "Controle qualquer computador remotamente"
+  "welcome_to_jetkvm_description": "Controle qualquer computador remotamente",
+  "atx_power_control_hold_hint": "Manter premido 3 s para forçar o desligamento"
 }

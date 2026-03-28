@@ -1070,5 +1070,6 @@
   "wake_on_lan_invalid_mac": "Недопустимый MAC-адрес",
   "wake_on_lan_magic_sent_success": "Magic Packet успешно отправлен",
   "welcome_to_jetkvm": "Добро пожаловать в JetKVM",
-  "welcome_to_jetkvm_description": "Управляйте любым компьютером удалённо"
+  "welcome_to_jetkvm_description": "Управляйте любым компьютером удалённо",
+  "atx_power_control_hold_hint": "Удерживайте 3 с для принудительного выключения"
 }

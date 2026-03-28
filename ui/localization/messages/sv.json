@@ -1070,5 +1070,6 @@
   "wake_on_lan_invalid_mac": "Ogiltig MAC-adress",
   "wake_on_lan_magic_sent_success": "Magic Packet skickat",
   "welcome_to_jetkvm": "Välkommen till JetKVM",
-  "welcome_to_jetkvm_description": "Fjärrstyr vilken dator som helst"
+  "welcome_to_jetkvm_description": "Fjärrstyr vilken dator som helst",
+  "atx_power_control_hold_hint": "Håll in 3 s för att tvinga avstängning"
 }

@@ -1070,5 +1070,6 @@
   "wake_on_lan_invalid_mac": "Cyfeiriad MAC annilys",
   "wake_on_lan_magic_sent_success": "Pecyn Hud wedi'i anfon yn llwyddiannus",
   "welcome_to_jetkvm": "Croeso i JetKVM",
-  "welcome_to_jetkvm_description": "Rheoli unrhyw gyfrifiadur o bell"
+  "welcome_to_jetkvm_description": "Rheoli unrhyw gyfrifiadur o bell",
+  "atx_power_control_hold_hint": "Dal am 3 eiliad i orfodi diffodd"
 }

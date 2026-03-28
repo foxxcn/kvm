@@ -1070,5 +1070,6 @@
   "wake_on_lan_invalid_mac": "Ugyldig MAC-adresse",
   "wake_on_lan_magic_sent_success": "Magic Packet sendt",
   "welcome_to_jetkvm": "Velkommen til JetKVM",
-  "welcome_to_jetkvm_description": "Fjernstyr enhver computer"
+  "welcome_to_jetkvm_description": "Fjernstyr enhver computer",
+  "atx_power_control_hold_hint": "Hold nede i 3 sek. for at tvinge slukning"
 }

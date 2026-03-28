@@ -1070,5 +1070,6 @@
   "wake_on_lan_invalid_mac": "無效的 MAC 位址",
   "wake_on_lan_magic_sent_success": "Magic Packet 傳送成功",
   "welcome_to_jetkvm": "歡迎使用 JetKVM",
-  "welcome_to_jetkvm_description": "遠端控制任何電腦"
+  "welcome_to_jetkvm_description": "遠端控制任何電腦",
+  "atx_power_control_hold_hint": "按住 3 秒強制關機"
 }
