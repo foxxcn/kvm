@@ -28,11 +28,16 @@ export default function WakeOnLanModal() {
   }, [close, setDisableVideoFocusTrap]);
 
   const onSendMagicPacket = useCallback(
-    (macAddress: string) => {
+    (macAddress: string, broadcastIP?: string) => {
       setErrorMessage(null);
       if (rpcDataChannel?.readyState !== "open") return;
 
-      send("sendWOLMagicPacket", { macAddress }, (resp: JsonRpcResponse) => {
+      const params: Record<string, string> = { macAddress };
+      if (broadcastIP) {
+        params.broadcastIP = broadcastIP;
+      }
+
+      send("sendWOLMagicPacket", params, (resp: JsonRpcResponse) => {
         if ("error" in resp) {
           const isInvalid = resp.error.data?.includes("invalid MAC address");
           if (isInvalid) {
@@ -85,9 +90,11 @@ export default function WakeOnLanModal() {
   );
 
   const onAddDevice = useCallback(
-    (name: string, macAddress: string) => {
+    (name: string, macAddress: string, broadcastIP?: string) => {
       if (!name || !macAddress) return;
-      const updatedDevices = [...storedDevices, { name, macAddress }];
+      const newDevice: StoredDevice = { name, macAddress };
+      if (broadcastIP) newDevice.broadcastIP = broadcastIP;
+      const updatedDevices = [...storedDevices, newDevice];
       console.log("updatedDevices", updatedDevices);
       send(
         "setWakeOnLanDevices",
