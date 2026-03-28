@@ -18,7 +18,7 @@ export default function useMouse() {
   const { setMousePosition, setMouseMove } = useMouseStore();
   const [blockWheelEvent, setBlockWheelEvent] = useState(false);
 
-  const { mouseMode, scrollThrottling, invertScroll } = useSettingsStore();
+  const { mouseMode, scrollThrottling } = useSettingsStore();
 
   // Track last absolute mouse position for resetMousePosition
   const lastAbsPos = useRef({ x: 0, y: 0 });
@@ -131,9 +131,7 @@ export default function useMouse() {
       };
 
       // Negate Y: browser deltaY positive = scroll down, HID Wheel positive = scroll up
-      // When invertScroll is enabled, skip the negation for natural scrolling
-      const scrollSign = invertScroll ? 1 : -1;
-      const wheelY = scrollSign * clampWheel(e.deltaY);
+      const wheelY = -clampWheel(e.deltaY);
       // Keep X as-is: browser deltaX and HID AC Pan both use positive = right
       const wheelX = clampWheel(e.deltaX);
 
@@ -147,7 +145,7 @@ export default function useMouse() {
         setTimeout(() => setBlockWheelEvent(false), scrollThrottling);
       }
     },
-    [send, blockWheelEvent, scrollThrottling, invertScroll],
+    [send, blockWheelEvent, scrollThrottling],
   );
 
   const resetMousePosition = useCallback(() => {
