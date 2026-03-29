@@ -12,6 +12,7 @@ import { JsonRpcResponse, useJsonRpc } from "@hooks/useJsonRpc";
 import AutoHeight from "@components/AutoHeight";
 import { Button } from "@components/Button";
 import { ConfirmDialog } from "@components/ConfirmDialog";
+import CustomTimeSyncCard from "@components/CustomTimeSyncCard";
 import DhcpLeaseCard from "@components/DhcpLeaseCard";
 import EmptyCard from "@components/EmptyCard";
 import { GridCard } from "@components/Card";
@@ -269,7 +270,7 @@ export default function SettingsNetworkRoute() {
         });
       }
 
-      if (dirty.ipv4_static?.dns?.every(dirty => dirty)) {
+      if (dirty.ipv4_static?.dns && dirty.ipv4_static.dns.length > 0 && dirty.ipv4_static.dns.every(dirty => dirty)) {
         changes.push({
           label: m.network_ipv4_dns(),
           from: initialSettingsRef.current?.ipv4_static?.dns.join(", ").toString() ?? "",
@@ -301,7 +302,7 @@ export default function SettingsNetworkRoute() {
         });
       }
 
-      if (dirty.ipv6_static?.dns?.every(dirty => dirty)) {
+      if (dirty.ipv6_static?.dns && dirty.ipv6_static.dns.length > 0 && dirty.ipv6_static.dns.every(dirty => dirty)) {
         changes.push({
           label: m.network_ipv6_dns(),
           from: initialSettingsRef.current?.ipv6_static?.dns.join(", ").toString() ?? "",
@@ -331,6 +332,7 @@ export default function SettingsNetworkRoute() {
   const ipv4mode = watch("ipv4_mode");
   const ipv6mode = watch("ipv6_mode");
   const domain = watch("domain");
+  const timeSyncMode = watch("time_sync_mode");
 
   const onDhcpLeaseRenew = () => {
     send("renewDHCPLease", {}, resp => {
@@ -493,11 +495,13 @@ export default function SettingsNetworkRoute() {
                     { value: "ntp_only", label: m.network_time_sync_ntp_only() },
                     { value: "ntp_and_http", label: m.network_time_sync_ntp_and_http() },
                     { value: "http_only", label: m.network_time_sync_http_only() },
-                    // { value: "custom", label: "Custom" },
+                    { value: "custom", label: m.network_time_sync_custom() },
                   ]}
                   {...register("time_sync_mode")}
                 />
               </SettingsItem>
+
+              {timeSyncMode === "custom" && <CustomTimeSyncCard />}
 
               <SettingsItem
                 title={m.network_dhcp_client_title()}

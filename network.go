@@ -334,6 +334,15 @@ func rpcSetNetworkSettings(settings RpcNetworkSettings) (*RpcNetworkSettings, er
 	}
 	config.NetworkConfig = newConfig
 
+	if timeSync != nil {
+		timeSync.SetNetworkConfig(newConfig)
+		go func() {
+			if err := timeSync.Sync(); err != nil {
+				l.Error().Err(err).Msg("failed to sync time after network settings change")
+			}
+		}()
+	}
+
 	l.Debug().Msg("saving new config")
 	if err := SaveConfig(); err != nil {
 		return nil, err
