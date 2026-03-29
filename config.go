@@ -117,6 +117,7 @@ type Config struct {
 	DefaultLogLevel      string               `json:"default_log_level"`
 	VideoSleepAfterSec   int                  `json:"video_sleep_after_sec"`
 	VideoQualityFactor   float64              `json:"video_quality_factor"`
+	VideoCodecPreference string               `json:"video_codec_preference"`
 	NativeMaxRestart     uint                 `json:"native_max_restart_attempts"`
 	MqttConfig           *MQTTConfig          `json:"mqtt_config"`
 }
@@ -200,8 +201,9 @@ func getDefaultConfig() Config {
 			_ = confparser.SetDefaultsAndValidate(c)
 			return c
 		}(),
-		DefaultLogLevel:    "WARN",
-		VideoQualityFactor: 1.0,
+		DefaultLogLevel:      "WARN",
+		VideoQualityFactor:   1.0,
+		VideoCodecPreference: "auto",
 		MqttConfig: &MQTTConfig{
 			Enabled:           false,
 			Port:              1883,

@@ -20,7 +20,11 @@ export default defineConfig({
   projects: [
     {
       name: "ui",
-      testIgnore: [/ota-.*/, /remote-agent\/.*/],
+      testIgnore: [/ota-.*/, /remote-agent\/.*/, /video-codec.*/],
+    },
+    {
+      name: "video-codec",
+      testMatch: /video-codec\.spec\.ts/,
     },
     {
       name: "remote-agent",

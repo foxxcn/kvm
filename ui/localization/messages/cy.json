@@ -143,6 +143,7 @@
   "attach": "Atodi",
   "atx_power_control_get_state_error": "Methwyd cael cyflwr pŵer ATX: {error}",
   "atx_power_control_hdd_led": "LED HDD",
+  "atx_power_control_hold_hint": "Dal am 3 eiliad i orfodi diffodd",
   "atx_power_control_long_power_button": "Pwyso Hir",
   "atx_power_control_power_button": "Pŵer",
   "atx_power_control_power_led": "LED Pŵer",
@@ -357,6 +358,7 @@
   "hide": "Cuddio",
   "ice_gathering_completed": "Casglu ICE wedi'i gwblhau",
   "info_caps_lock": "Caps Lock",
+  "info_codec": "Codec:",
   "info_compose": "Compose",
   "info_hdmi_state": "Cyflwr HDMI:",
   "info_hidrpc_state": "Cyflwr HidRPC:",
@@ -980,6 +982,11 @@
   "user_interface_language_title": "Iaith y Rhyngwyneb",
   "video_brightness_description": "Lefel disgleirdeb ({value}x)",
   "video_brightness_title": "Disgleirdeb",
+  "video_codec_auto": "Auto",
+  "video_codec_description": "Mae H.265 yn darparu ansawdd delwedd gwell ar yr un gyfradd didau. Mae Auto yn dewis y codec gorau y mae eich porwr yn ei gefnogi.",
+  "video_codec_h264": "H.264 (AVC)",
+  "video_codec_h265": "H.265 (HEVC)",
+  "video_codec_title": "Codec Fideo",
   "video_contrast_description": "Lefel cyferbyniad ({value}x)",
   "video_contrast_title": "Cyferbyniad",
   "video_custom_edid_description": "Mae EDID yn manylu ar gydnawsedd modd fideo. Mae'r gosodiadau rhagosodedig yn gweithio yn y rhan fwyaf o achosion, ond efallai y bydd angen addasu ar gyfer UEFI/BIOS unigryw.",
@@ -1001,6 +1008,7 @@
   "video_enhancement_title": "Gwella Fideo",
   "video_failed_get_debug_info": "Methwyd â chael gwybodaeth dadfygio: {error}",
   "video_failed_get_edid": "Methwyd â chael EDID: {error}",
+  "video_failed_set_codec": "Methwyd â gosod codec fideo: {error}",
   "video_failed_set_edid": "Methwyd â gosod EDID: {error}",
   "video_failed_set_stream_quality": "Methwyd â gosod ansawdd y ffrwd: {error}",
   "video_get_debugging_info": "Cael Gwybodaeth Dadfygio",
@@ -1070,6 +1078,5 @@
   "wake_on_lan_invalid_mac": "Cyfeiriad MAC annilys",
   "wake_on_lan_magic_sent_success": "Pecyn Hud wedi'i anfon yn llwyddiannus",
   "welcome_to_jetkvm": "Croeso i JetKVM",
-  "welcome_to_jetkvm_description": "Rheoli unrhyw gyfrifiadur o bell",
-  "atx_power_control_hold_hint": "Dal am 3 eiliad i orfodi diffodd"
+  "welcome_to_jetkvm_description": "Rheoli unrhyw gyfrifiadur o bell"
 }

@@ -505,12 +505,12 @@ func (p *NativeProxy) Stop() error {
 	return nil
 }
 
-func zeroValue[V string | bool | float64]() V {
+func zeroValue[V string | bool | float64 | int]() V {
 	var v V
 	return v
 }
 
-func nativeProxyClientExec[K comparable, V string | bool | float64](p *NativeProxy, fn func(*GRPCClient) (V, error)) (V, error) {
+func nativeProxyClientExec[K comparable, V string | bool | float64 | int](p *NativeProxy, fn func(*GRPCClient) (V, error)) (V, error) {
 	p.clientMu.RLock()
 	defer p.clientMu.RUnlock()
 
@@ -561,6 +561,18 @@ func (p *NativeProxy) VideoSetQualityFactor(factor float64) error {
 func (p *NativeProxy) VideoGetQualityFactor() (float64, error) {
 	return nativeProxyClientExec[float64](p, func(client *GRPCClient) (float64, error) {
 		return client.VideoGetQualityFactor()
+	})
+}
+
+func (p *NativeProxy) VideoSetCodecType(codecType int) error {
+	return nativeProxyClientExecWithoutArgument(p, func(client *GRPCClient) error {
+		return client.VideoSetCodecType(codecType)
+	})
+}
+
+func (p *NativeProxy) VideoGetCodecType() (int, error) {
+	return nativeProxyClientExec[int](p, func(client *GRPCClient) (int, error) {
+		return client.VideoGetCodecType()
 	})
 }
 
