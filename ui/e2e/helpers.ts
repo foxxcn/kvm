@@ -663,14 +663,20 @@ export const SSH_OPTS = [
 
 const SSH_MAX_RETRIES = 3;
 const SSH_RETRY_BASE_DELAY_MS = 2000;
+const SSH_COMMAND_TIMEOUT_MS = 15000;
+
+function escapeForSingleQuotedShell(cmd: string): string {
+  return cmd.replace(/'/g, "'\\''");
+}
 
 export async function sshExec(cmd: string, ignoreErrors = false): Promise<string> {
   const host = getDeviceHost();
-  const sshCmd = `ssh ${SSH_OPTS} root@${host} '${cmd}'`;
+  const escapedCmd = escapeForSingleQuotedShell(cmd);
+  const sshCmd = `ssh ${SSH_OPTS} root@${host} '${escapedCmd}'`;
 
   for (let attempt = 1; attempt <= SSH_MAX_RETRIES; attempt++) {
     try {
-      const { stdout } = await execAsync(sshCmd);
+      const { stdout } = await execAsync(sshCmd, { timeout: SSH_COMMAND_TIMEOUT_MS });
       return stdout;
     } catch (error) {
       if (ignoreErrors) return "";
@@ -680,7 +686,9 @@ export async function sshExec(cmd: string, ignoreErrors = false): Promise<string
         msg.includes("Connection reset") ||
         msg.includes("Connection refused") ||
         msg.includes("Connection timed out") ||
-        msg.includes("No route to host");
+        msg.includes("No route to host") ||
+        msg.includes("ETIMEDOUT") ||
+        msg.includes("timed out");
 
       if (isTransient && attempt < SSH_MAX_RETRIES) {
         const delay = SSH_RETRY_BASE_DELAY_MS * attempt;

@@ -40,10 +40,62 @@ function remoteHostExec(cmd: string, timeoutMs = 15000): string {
   // Use single-quote wrapping. Commands containing single quotes must
   // use the '\'' escape sequence (end quote, literal quote, resume quote).
   const escaped = cmd.replace(/'/g, "'\\''");
-  return execSync(`ssh ${SSH_OPTS} ${target} '${escaped}'`, {
-    encoding: "utf8",
-    timeout: timeoutMs,
-  });
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      return execSync(`ssh ${SSH_OPTS} ${target} '${escaped}'`, {
+        encoding: "utf8",
+        timeout: timeoutMs,
+      });
+    } catch (error) {
+      lastError = error;
+      const msg = error instanceof Error ? error.message : String(error);
+      const isTransient =
+        msg.includes("Connection reset") ||
+        msg.includes("Connection refused") ||
+        msg.includes("Connection timed out") ||
+        msg.includes("No route to host") ||
+        msg.includes("ETIMEDOUT") ||
+        msg.includes("timed out");
+
+      if (!isTransient || attempt === 3) break;
+      execSync("sleep 2");
+    }
+  }
+
+  throw lastError;
+}
+
+function getRemoteHostTtyACM(): string {
+  return remoteHostExec('sh -lc "ls -1 /dev/ttyACM* 2>/dev/null | head -1 || true"', 5000).trim();
+}
+
+async function waitForRemoteHostTtyACM(
+  shouldExist: boolean,
+  timeoutMs = 15000,
+  intervalMs = 500,
+): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const ttyACM = getRemoteHostTtyACM();
+    if (shouldExist ? ttyACM.includes("ttyACM") : ttyACM === "") {
+      return ttyACM;
+    }
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+
+  const ttyACM = getRemoteHostTtyACM();
+  if (shouldExist ? ttyACM.includes("ttyACM") : ttyACM === "") {
+    return ttyACM;
+  }
+
+  throw new Error(
+    shouldExist
+      ? `ttyACM device did not appear on remote host within ${timeoutMs}ms`
+      : `ttyACM device did not disappear from remote host within ${timeoutMs}ms`,
+  );
 }
 
 /**
@@ -1734,22 +1786,18 @@ test.describe("Remote Host Agent", () => {
     await callJsonRpc(sharedPage, "setUsbDevices", {
       devices: { ...USB_DEVICES_DEFAULT, serial_console: false },
     });
-    await new Promise(r => setTimeout(r, 3000));
 
     // Verify the host does NOT see a ttyACM device
-    const beforeACM = remoteHostExec(
-      "find /dev -maxdepth 1 -name 'ttyACM*' | head -1 || true",
-    ).trim();
+    const beforeACM = await waitForRemoteHostTtyACM(false);
     expect(beforeACM).toBe("");
 
     // Enable serial console
     await callJsonRpc(sharedPage, "setUsbDevices", {
       devices: { ...USB_DEVICES_DEFAULT, serial_console: true },
     });
-    await new Promise(r => setTimeout(r, 3000));
 
     // Verify the host now sees a ttyACM device
-    const afterACM = remoteHostExec("find /dev -maxdepth 1 -name 'ttyACM*' | head -1").trim();
+    const afterACM = await waitForRemoteHostTtyACM(true);
     expect(afterACM).toContain("ttyACM");
 
     // Verify /dev/ttyGS0 exists on the KVM device
@@ -1760,12 +1808,9 @@ test.describe("Remote Host Agent", () => {
     await callJsonRpc(sharedPage, "setUsbDevices", {
       devices: { ...USB_DEVICES_DEFAULT, serial_console: false },
     });
-    await new Promise(r => setTimeout(r, 3000));
 
     // Verify the host no longer sees a ttyACM device
-    const removedACM = remoteHostExec(
-      "find /dev -maxdepth 1 -name 'ttyACM*' | head -1 || true",
-    ).trim();
+    const removedACM = await waitForRemoteHostTtyACM(false);
     expect(removedACM).toBe("");
 
     // Verify other USB functions still work (keyboard, mouse)
@@ -1788,7 +1833,7 @@ test.describe("Remote Host Agent", () => {
     await new Promise(r => setTimeout(r, 3000));
 
     // Find the ttyACM device on the remote host
-    const ttyACM = remoteHostExec("find /dev -maxdepth 1 -name 'ttyACM*' | head -1").trim();
+    const ttyACM = await waitForRemoteHostTtyACM(true);
     expect(ttyACM).toContain("ttyACM");
 
     // Reload the page so the action bar picks up serial_console enabled state
