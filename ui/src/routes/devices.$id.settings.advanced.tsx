@@ -28,6 +28,7 @@ export default function SettingsAdvancedRoute() {
   const [sshKey, setSSHKey] = useState<string>("");
   const { setDeveloperMode } = useSettingsStore();
   const [devChannel, setDevChannel] = useState(false);
+  const [defaultLogLevel, setDefaultLogLevel] = useState<string>("WARN");
   const [usbEmulationEnabled, setUsbEmulationEnabled] = useState(false);
   const [showLoopbackWarning, setShowLoopbackWarning] = useState(false);
   const [localLoopbackOnly, setLocalLoopbackOnly] = useState(false);
@@ -65,6 +66,11 @@ export default function SettingsAdvancedRoute() {
     send("getLocalLoopbackOnly", {}, (resp: JsonRpcResponse) => {
       if ("error" in resp) return;
       setLocalLoopbackOnly(resp.result as boolean);
+    });
+
+    send("getDefaultLogLevel", {}, (resp: JsonRpcResponse) => {
+      if ("error" in resp) return;
+      setDefaultLogLevel(resp.result as string);
     });
   }, [send, setDeveloperMode]);
 
@@ -454,6 +460,37 @@ export default function SettingsAdvancedRoute() {
 
         {settings.debugMode && (
           <NestedSettingsGroup>
+            <SettingsItem
+              title={m.advanced_troubleshooting_log_level_title()}
+              description={m.advanced_troubleshooting_log_level_description()}
+            >
+              <SelectMenuBasic
+                size="SM"
+                value={defaultLogLevel}
+                options={[
+                  { label: m.advanced_log_level_error(), value: "ERROR" },
+                  { label: m.advanced_log_level_warning(), value: "WARN" },
+                  { label: m.advanced_log_level_info(), value: "INFO" },
+                  { label: m.advanced_log_level_debug(), value: "DEBUG" },
+                  { label: m.advanced_log_level_trace(), value: "TRACE" },
+                ]}
+                onChange={e => {
+                  const level = e.target.value;
+                  const previousLevel = defaultLogLevel;
+                  setDefaultLogLevel(level);
+                  send("setDefaultLogLevel", { level }, (resp: JsonRpcResponse) => {
+                    if ("error" in resp) {
+                      setDefaultLogLevel(previousLevel);
+                      notifications.error(
+                        m.advanced_error_set_log_level({ error: resp.error.data || m.unknown_error() }),
+                      );
+                      return;
+                    }
+                  });
+                }}
+              />
+            </SettingsItem>
+
             <SettingsItem
               title={m.advanced_usb_emulation_title()}
               description={m.advanced_usb_emulation_description()}

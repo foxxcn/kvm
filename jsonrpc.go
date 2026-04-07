@@ -17,6 +17,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/jetkvm/kvm/internal/hidrpc"
+	"github.com/jetkvm/kvm/internal/logging"
 	"github.com/jetkvm/kvm/internal/usbgadget"
 	"github.com/jetkvm/kvm/internal/utils"
 )
@@ -1086,6 +1087,62 @@ func rpcSetLocalLoopbackOnly(enabled bool) error {
 	return nil
 }
 
+var validLogLevels = map[string]bool{
+	"TRACE": true,
+	"DEBUG": true,
+	"INFO":  true,
+	"WARN":  true,
+	"ERROR": true,
+}
+
+const testLogProbeMessage = "JSON-RPC test log probe"
+
+func rpcGetDefaultLogLevel() (string, error) {
+	return config.DefaultLogLevel, nil
+}
+
+func rpcSetDefaultLogLevel(level string) error {
+	if !validLogLevels[level] {
+		return fmt.Errorf("invalid log level: %s", level)
+	}
+
+	if config.DefaultLogLevel == level {
+		return nil
+	}
+
+	config.DefaultLogLevel = level
+	if err := SaveConfig(); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
+	logging.GetRootLogger().UpdateLogLevel(level)
+
+	return nil
+}
+
+func rpcEmitTestLog(level string) error {
+	if !validLogLevels[level] {
+		return fmt.Errorf("invalid log level: %s", level)
+	}
+
+	testLogger := logging.GetSubsystemLogger("testlog")
+
+	switch level {
+	case "TRACE":
+		testLogger.Trace().Msg(testLogProbeMessage)
+	case "DEBUG":
+		testLogger.Debug().Msg(testLogProbeMessage)
+	case "INFO":
+		testLogger.Info().Msg(testLogProbeMessage)
+	case "WARN":
+		testLogger.Warn().Msg(testLogProbeMessage)
+	case "ERROR":
+		testLogger.Error().Msg(testLogProbeMessage)
+	}
+
+	return nil
+}
+
 var (
 	keyboardMacroCancel context.CancelFunc
 	keyboardMacroLock   sync.Mutex
@@ -1281,6 +1338,9 @@ var rpcHandlers = map[string]RPCHandler{
 	"setKeyboardMacros":          {Func: setKeyboardMacros, Params: []string{"params"}},
 	"getLocalLoopbackOnly":       {Func: rpcGetLocalLoopbackOnly},
 	"setLocalLoopbackOnly":       {Func: rpcSetLocalLoopbackOnly, Params: []string{"enabled"}},
+	"getDefaultLogLevel":         {Func: rpcGetDefaultLogLevel},
+	"setDefaultLogLevel":         {Func: rpcSetDefaultLogLevel, Params: []string{"level"}},
+	"emitTestLog":                {Func: rpcEmitTestLog, Params: []string{"level"}},
 	"getPublicIPAddresses":       {Func: rpcGetPublicIPAddresses, Params: []string{"refresh"}},
 	"checkPublicIPAddresses":     {Func: rpcCheckPublicIPAddresses},
 	"getTailscaleStatus":         {Func: rpcGetTailscaleStatus},
