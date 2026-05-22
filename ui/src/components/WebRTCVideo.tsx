@@ -6,6 +6,7 @@ import { isWindows } from "@/utils";
 import useKeyboard from "@hooks/useKeyboard";
 import useMouse from "@hooks/useMouse";
 import { useRTCStore, useSettingsStore, useUiStore, useVideoStore } from "@hooks/stores";
+import { JsonRpcResponse, useJsonRpc } from "@hooks/useJsonRpc";
 import VirtualKeyboard from "@components/VirtualKeyboard";
 import Actionbar from "@components/ActionBar";
 import MacroBar from "@components/MacroBar";
@@ -30,11 +31,16 @@ export default function WebRTCVideo({
 }) {
   // Video and stream related refs and states
   const videoElm = useRef<HTMLVideoElement>(null);
+  const audioElm = useRef<HTMLAudioElement>(null);
   const fullscreenContainerRef = useRef<HTMLDivElement>(null);
-  const { mediaStream, peerConnectionState } = useRTCStore();
+  const { mediaStream, mediaStreamTrackVersion, peerConnectionState } = useRTCStore();
   const [isPlaying, setIsPlaying] = useState(false);
+  const [audioAutoplayBlocked, setAudioAutoplayBlocked] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(false);
   const [isPointerLockActive, setIsPointerLockActive] = useState(false);
   const [isKeyboardLockActive, setIsKeyboardLockActive] = useState(false);
+
+  const { send: sendRpc } = useJsonRpc();
 
   const isPointerLockPossible =
     window.location.protocol === "https:" || window.location.hostname === "localhost";
@@ -438,33 +444,49 @@ export default function WebRTCVideo({
   );
 
   useEffect(
-    function updateVideoStreamOnNewTrack() {
-      if (!peerConnection) return;
-      const abortController = new AbortController();
-      const signal = abortController.signal;
-
-      peerConnection.addEventListener(
-        "track",
-        (e: RTCTrackEvent) => {
-          addStreamToVideoElm(e.streams[0]);
-        },
-        { signal },
-      );
-
-      return () => {
-        abortController.abort();
-      };
-    },
-    [addStreamToVideoElm, peerConnection],
-  );
-
-  useEffect(
     function updateVideoStream() {
       if (!mediaStream) return;
-      // We set the as early as possible
       addStreamToVideoElm(mediaStream);
     },
     [addStreamToVideoElm, mediaStream],
+  );
+
+  // Fetch the device's audio-enabled state once the RPC channel is ready.
+  // We only attach the <audio> element below when it's true — otherwise
+  // Firefox prompts for audio autoplay permission on a silent stream that
+  // would never actually play any sound.
+  useEffect(
+    function fetchAudioConfig() {
+      if (peerConnection?.connectionState !== "connected") return;
+      sendRpc("getAudioConfig", {}, (resp: JsonRpcResponse) => {
+        if ("error" in resp) return;
+        setAudioEnabled((resp.result as { enabled: boolean }).enabled);
+      });
+    },
+    [peerConnection?.connectionState, sendRpc],
+  );
+
+  // Audio plays through a separate <audio> element because the <video> is
+  // muted (kept muted so video autoplay isn't blocked when no user gesture
+  // has been recorded). If the browser blocks audio autoplay, the autoplay
+  // overlay surfaces a click target.
+  useEffect(
+    function updateAudioStream() {
+      const elm = audioElm.current;
+      if (!elm || !mediaStream || !audioEnabled) return;
+
+      elm.srcObject = mediaStream;
+      elm
+        .play()
+        .then(() => setAudioAutoplayBlocked(false))
+        .catch(() => setAudioAutoplayBlocked(true));
+
+      return () => {
+        elm.srcObject = null;
+        setAudioAutoplayBlocked(false);
+      };
+    },
+    [mediaStream, mediaStreamTrackVersion, audioEnabled],
   );
 
   // Setup Keyboard Events
@@ -568,11 +590,18 @@ export default function WebRTCVideo({
 
   const hasNoAutoPlayPermissions = useMemo(() => {
     if (peerConnection?.connectionState !== "connected") return false;
-    if (isPlaying) return false;
+    if (isPlaying && !audioAutoplayBlocked) return false;
     if (hdmiError) return false;
     if (videoHeight === 0 || videoWidth === 0) return false;
     return true;
-  }, [hdmiError, isPlaying, peerConnection?.connectionState, videoHeight, videoWidth]);
+  }, [
+    audioAutoplayBlocked,
+    hdmiError,
+    isPlaying,
+    peerConnection?.connectionState,
+    videoHeight,
+    videoWidth,
+  ]);
 
   const showPointerLockBar = useMemo(() => {
     if (settings.mouseMode !== "relative") return false;
@@ -606,13 +635,8 @@ export default function WebRTCVideo({
     <div className="grid h-full w-full grid-rows-(--grid-layout)">
       <div className="flex min-h-[39.5px] flex-col">
         <div className="flex flex-col">
-          <fieldset
-            disabled={peerConnection?.connectionState !== "connected"}
-            className="contents"
-          >
-            <Actionbar
-              requestFullscreen={requestFullscreen}
-            />
+          <fieldset disabled={peerConnection?.connectionState !== "connected"} className="contents">
+            <Actionbar requestFullscreen={requestFullscreen} />
             <MacroBar />
           </fieldset>
         </div>
@@ -634,9 +658,7 @@ export default function WebRTCVideo({
                 <div className="grid grow grid-rows-(--grid-bodyFooter) overflow-hidden">
                   {/* In relative mouse mode and under https, we enable the pointer lock, and to do so we need a bar to show the user to click on the video to enable mouse control */}
                   <PointerLockBar show={showPointerLockBar} />
-                  <div
-                    className="relative mx-4 my-2 flex items-center justify-center overflow-hidden"
-                  >
+                  <div className="relative mx-4 my-2 flex items-center justify-center overflow-hidden">
                     <div
                       ref={fullscreenContainerRef}
                       className="relative flex h-full w-full items-center justify-center"
@@ -652,21 +674,19 @@ export default function WebRTCVideo({
                         disablePictureInPicture
                         controlsList="nofullscreen"
                         style={videoStyle}
-                        className={cx(
-                          "h-full w-full object-contain transition-all duration-1000",
-                          {
-                            "cursor-none": settings.isCursorHidden,
-                            "pointer-events-none": isOcrMode,
-                            "opacity-0!":
-                              isVideoLoading ||
-                              hdmiError ||
-                              hasConnectionIssues ||
-                              peerConnectionState !== "connected",
-                            "opacity-60!": showPointerLockBar,
-                            "animate-slideUpFade": isPlaying,
-                          },
-                        )}
+                        className={cx("h-full w-full object-contain transition-all duration-1000", {
+                          "cursor-none": settings.isCursorHidden,
+                          "pointer-events-none": isOcrMode,
+                          "opacity-0!":
+                            isVideoLoading ||
+                            hdmiError ||
+                            hasConnectionIssues ||
+                            peerConnectionState !== "connected",
+                          "opacity-60!": showPointerLockBar,
+                          "animate-slideUpFade": isPlaying,
+                        })}
                       />
+                      {audioEnabled && <audio ref={audioElm} autoPlay playsInline hidden />}
                       <OcrOverlay />
                       {peerConnection?.connectionState == "connected" && !hasConnectionIssues && (
                         <div
@@ -680,6 +700,10 @@ export default function WebRTCVideo({
                               show={hasNoAutoPlayPermissions}
                               onPlayClick={() => {
                                 videoElm.current?.play();
+                                audioElm.current
+                                  ?.play()
+                                  .then(() => setAudioAutoplayBlocked(false))
+                                  .catch(() => undefined);
                               }}
                             />
                           </div>
