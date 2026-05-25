@@ -22,6 +22,8 @@ import { keys } from "@/keyboardMappings";
 import notifications from "@/notifications";
 import { m } from "@localizations/messages.js";
 
+const initialHdmiErrorGraceMs = 2500;
+
 export default function WebRTCVideo({
   hasConnectionIssues,
   hideStatusBar,
@@ -76,8 +78,10 @@ export default function WebRTCVideo({
   const { peerConnection } = useRTCStore();
 
   // HDMI and UI states
-  const hdmiError = ["no_lock", "no_signal", "out_of_range"].includes(hdmiState);
   const isVideoLoading = !isPlaying;
+  const rawHdmiError = ["no_lock", "no_signal", "out_of_range"].includes(hdmiState);
+  const [isInitialHdmiErrorGraceActive, setIsInitialHdmiErrorGraceActive] = useState(false);
+  const hdmiError = rawHdmiError && !isInitialHdmiErrorGraceActive;
 
   // Video-related
   const handleResize = useCallback(
@@ -113,6 +117,34 @@ export default function WebRTCVideo({
     setIsPlaying(true);
     if (videoElm.current) updateVideoSizeStore(videoElm.current);
   }, [updateVideoSizeStore]);
+
+  // isPlaying belongs to the current peer connection/stream, not the component lifetime.
+  // Reset it before reconnects so startup loading and HDMI grace can run again.
+  useEffect(() => {
+    if (peerConnectionState !== "connected") {
+      setIsPlaying(false);
+    }
+  }, [peerConnectionState]);
+
+  // Restoring EDID for idle display hiding cycles HDMI hotplug on the bridge.
+  // The host can report no_signal/no_lock while it re-enumerates the display,
+  // so keep the startup UI in the loading state before showing a persistent
+  // HDMI error.
+  useEffect(() => {
+    if (peerConnectionState !== "connected" || isPlaying) {
+      setIsInitialHdmiErrorGraceActive(false);
+      return;
+    }
+
+    setIsInitialHdmiErrorGraceActive(true);
+    const timeout = window.setTimeout(() => {
+      setIsInitialHdmiErrorGraceActive(false);
+    }, initialHdmiErrorGraceMs);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [isPlaying, peerConnectionState]);
 
   // On mount, get the video size
   useEffect(
@@ -445,7 +477,13 @@ export default function WebRTCVideo({
 
   useEffect(
     function updateVideoStream() {
-      if (!mediaStream) return;
+      setIsPlaying(false);
+
+      if (!mediaStream) {
+        if (videoElm.current) videoElm.current.srcObject = null;
+        return;
+      }
+
       addStreamToVideoElm(mediaStream);
     },
     [addStreamToVideoElm, mediaStream],

@@ -228,6 +228,10 @@ func rpcSetAutoUpdateState(enabled bool) (bool, error) {
 }
 
 func rpcGetEDID() (string, error) {
+	if !isHostDisplayAdvertised() {
+		return configuredVideoEDID(), nil
+	}
+
 	resp, err := nativeInstance.VideoGetEDID()
 	if err != nil {
 		return "", err
@@ -236,19 +240,59 @@ func rpcGetEDID() (string, error) {
 }
 
 func rpcSetEDID(edid string) error {
+	if isInternalDisabledEDID(edid) {
+		return fmt.Errorf("invalid EDID")
+	}
+
 	if edid == "" {
 		logger.Info().Msg("Restoring EDID to default")
 	} else {
 		logger.Info().Str("edid", edid).Msg("Setting EDID")
 	}
-	err := nativeInstance.VideoSetEDID(edid)
-	if err != nil {
+
+	previousEDID := config.EdidString
+	config.EdidString = edid
+
+	if err := reapplyHostDisplayAdvertisement("set_edid"); err != nil {
+		config.EdidString = previousEDID
 		return err
 	}
 
 	// Save EDID to config, allowing it to be restored on reboot.
-	config.EdidString = edid
-	_ = SaveConfig()
+	if err := SaveConfig(); err != nil {
+		config.EdidString = previousEDID
+		_ = reapplyHostDisplayAdvertisement("set_edid_rollback")
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+	return nil
+}
+
+type rpcHostDisplayIdleModeResponse struct {
+	Enabled bool `json:"enabled"`
+}
+
+func rpcGetHostDisplayIdleMode() rpcHostDisplayIdleModeResponse {
+	return rpcHostDisplayIdleModeResponse{Enabled: config.HideDisplayWhenIdle}
+}
+
+func rpcSetHostDisplayIdleMode(enabled bool) error {
+	previous := config.HideDisplayWhenIdle
+	if previous == enabled {
+		return nil
+	}
+
+	config.HideDisplayWhenIdle = enabled
+	if err := applyHostDisplayAdvertisement("set_host_display_disable_when_idle"); err != nil {
+		config.HideDisplayWhenIdle = previous
+		return err
+	}
+
+	if err := SaveConfig(); err != nil {
+		config.HideDisplayWhenIdle = previous
+		_ = applyHostDisplayAdvertisement("set_host_display_disable_when_idle_rollback")
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
 	return nil
 }
 
@@ -1295,6 +1339,8 @@ var rpcHandlers = map[string]RPCHandler{
 	"setAutoUpdateState":         {Func: rpcSetAutoUpdateState, Params: []string{"enabled"}},
 	"getEDID":                    {Func: rpcGetEDID},
 	"setEDID":                    {Func: rpcSetEDID, Params: []string{"edid"}},
+	"getHostDisplayIdleMode":     {Func: rpcGetHostDisplayIdleMode},
+	"setHostDisplayIdleMode":     {Func: rpcSetHostDisplayIdleMode, Params: []string{"enabled"}},
 	"getVideoLogStatus":          {Func: rpcGetVideoLogStatus},
 	"getVideoSleepMode":          {Func: rpcGetVideoSleepMode},
 	"setVideoSleepMode":          {Func: rpcSetVideoSleepMode, Params: []string{"duration"}},

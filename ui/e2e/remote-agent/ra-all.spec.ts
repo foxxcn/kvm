@@ -28,6 +28,7 @@ import {
 } from "../helpers";
 import {
   createRemoteAgent,
+  connectedDisplayConnectors,
   KEY,
   HID_TO_LINUX,
   type RemoteAgent,
@@ -765,6 +766,86 @@ test.describe("Remote Host Agent", () => {
   // ═══════════════════════════════════════════
   // DISPLAY + EDID
   // ═══════════════════════════════════════════
+
+  test("display: host advertises JetKVM only while session is active", async () => {
+    test.setTimeout(80_000);
+
+    await waitForWebRTCReady(sharedPage);
+    await waitForRpcReady(sharedPage);
+
+    const originalConfig = (await callJsonRpc(sharedPage, "getHostDisplayIdleMode")) as {
+      enabled: boolean;
+    };
+    let hiddenConnectors: string[] = [];
+
+    try {
+      await callJsonRpc(sharedPage, "setHostDisplayIdleMode", { enabled: false });
+
+      const alwaysAdvertisedDisplays = await agent!.waitForDisplays(
+        displays => connectedDisplayConnectors(displays).length > 0,
+        15_000,
+        "connected host display while idle hiding is disabled",
+      );
+      const alwaysAdvertisedConnectors = connectedDisplayConnectors(alwaysAdvertisedDisplays);
+
+      await sharedPage.goto("about:blank");
+      await sharedPage.waitForTimeout(3_000);
+
+      const disabledIdleConnectors = new Set(
+        connectedDisplayConnectors(await agent!.getDisplays()),
+      );
+      expect(
+        alwaysAdvertisedConnectors.every(connector => disabledIdleConnectors.has(connector)),
+        `expected JetKVM display to remain connected when idle hiding is disabled; active=${alwaysAdvertisedConnectors.join(",")} idle=${[...disabledIdleConnectors].join(",")}`,
+      ).toBe(true);
+
+      await sharedPage.goto("/", { waitUntil: "networkidle" });
+      await waitForWebRTCReady(sharedPage);
+      await waitForRpcReady(sharedPage);
+
+      await callJsonRpc(sharedPage, "setHostDisplayIdleMode", { enabled: true });
+
+      const activeDisplays = await agent!.waitForDisplays(
+        displays => connectedDisplayConnectors(displays).length > 0,
+        15_000,
+        "connected host display while WebRTC session is active",
+      );
+      const activeConnectors = connectedDisplayConnectors(activeDisplays);
+
+      await sharedPage.goto("about:blank");
+
+      const idleDisplays = await agent!.waitForDisplays(
+        displays => {
+          const idleConnectors = new Set(connectedDisplayConnectors(displays));
+          hiddenConnectors = activeConnectors.filter(connector => !idleConnectors.has(connector));
+          return hiddenConnectors.length > 0;
+        },
+        20_000,
+        "JetKVM display to disappear from the host after the last session disconnects",
+      );
+
+      const idleConnectors = new Set(connectedDisplayConnectors(idleDisplays));
+      hiddenConnectors = activeConnectors.filter(connector => !idleConnectors.has(connector));
+      expect(
+        hiddenConnectors.length,
+        `expected at least one active connector to disappear; active=${activeConnectors.join(",")} idle=${[...idleConnectors].join(",")}`,
+      ).toBeGreaterThan(0);
+    } finally {
+      await sharedPage.goto("/", { waitUntil: "networkidle" });
+      await waitForWebRTCReady(sharedPage);
+      await waitForRpcReady(sharedPage);
+      await callJsonRpc(sharedPage, "setHostDisplayIdleMode", { enabled: originalConfig.enabled });
+    }
+
+    await agent!.waitForDisplays(
+      displays => {
+        const connected = new Set(connectedDisplayConnectors(displays));
+        return hiddenConnectors.every(connector => connected.has(connector));
+      },
+      20_000,
+      "JetKVM display to reappear on the host after WebRTC reconnects",
+    );
+  });
 
   test("display: resolution, modes, and EDID preset change", async () => {
     test.setTimeout(90_000);
