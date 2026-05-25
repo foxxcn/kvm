@@ -570,6 +570,15 @@ export default function WebRTCVideo({
       const preventContextMenu = (e: MouseEvent) => e.preventDefault();
       videoElmRefValue.addEventListener("contextmenu", preventContextMenu, { signal });
 
+      // Suppress browser Back/Forward navigation on X1/X2 mouse buttons so
+      // those presses are forwarded to the remote target instead.
+      const preventXButtonNav = (e: MouseEvent) => {
+        if (e.button === 3 || e.button === 4) e.preventDefault();
+      };
+      videoElmRefValue.addEventListener("mousedown", preventXButtonNav, { signal });
+      videoElmRefValue.addEventListener("mouseup", preventXButtonNav, { signal });
+      videoElmRefValue.addEventListener("auxclick", preventXButtonNav, { signal });
+
       return () => {
         abortController.abort();
       };
